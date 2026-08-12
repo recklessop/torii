@@ -1,5 +1,9 @@
 # torii
 
+[![CI](https://github.com/recklessop/torii/actions/workflows/ci.yml/badge.svg)](https://github.com/recklessop/torii/actions/workflows/ci.yml)
+[![License: PolyForm NC 1.0.0](https://img.shields.io/badge/license-PolyForm%20NC%201.0.0-yellow.svg)](LICENSE)
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/)
+
 **A self-owned gateway in front of your MCP servers.** torii is an OAuth 2.1
 authorization server toward Claude clients (web, mobile, Office add-ins, Claude
 Code, the API) and static bearer keys for everything else, with tool-level
