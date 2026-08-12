@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+{% block title %}{{ principal.username }} — torii{% endblock %}
+{% block heading %}{{ principal.username }}{% endblock %}
+{% block crumb %}<a href="/ui/admin/principals">← all principals</a>{% endblock %}
+{% block content %}
+
+{% if minted %}
+<div class="card">
+  <h2>New credential</h2>
+  <div class="secret">{{ minted }}</div>
+  <p class="muted">Show this to them once — torii won't display it again.</p>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Account</h2>
+  <div class="overflow"><table>
+    <tbody>
+      <tr><th style="width:170px">Kind</th><td>{{ principal.kind }}</td></tr>
+      <tr><th>Role</th><td>{% if principal.is_admin %}administrator{% else %}user{% endif %}</td></tr>
+      <tr><th>State</th><td>
+        {% if principal.disabled_at %}<span class="pill off">disabled</span>
+        {% else %}<span class="pill ok">active</span>{% endif %}</td></tr>
+    </tbody>
+  </table></div>
+</div>
+
+{% if principal.kind == 'human' %}
+<div class="card">
+  <h2>Two-factor</h2>
+  <p class="sub">
+    {% if principal.is_admin %}
+      Administrators always require an authenticator — that's enforced by the
+      database, not just this page.
+    {% elif principal.totp_required %}
+      Required for this account.
+    {% else %}
+      Not required — a password alone signs them in.
+    {% endif %}
+  </p>
+  <p>
+    {% if principal.totp_enrolled %}<span class="pill ok">enrolled</span>
+    {% else %}<span class="pill">not enrolled</span>{% endif %}
+    {% if principal.totp_required %}<span class="pill">required</span>{% endif %}
+  </p>
+  <div class="row">
+    {% if not principal.is_admin %}
+    <div>
+      <form method="post" action="/ui/admin/principals/{{ principal.id }}/toggle_totp_required">
+        <button class="secondary" type="submit">
+          {% if principal.totp_required %}Stop requiring it{% else %}Require an authenticator{% endif %}
+        </button>
+      </form>
+    </div>
+    {% endif %}
+    {% if principal.totp_enrolled %}
+    <div>
+      <form method="post" action="/ui/admin/principals/{{ principal.id }}/reset_totp"
+            onsubmit="return confirm('Clear this authenticator? Use this when someone loses their phone.')">
+        <button class="danger" type="submit">Reset authenticator (lost phone)</button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <h2>Passkeys</h2>
+  <p class="sub">
+    Their Touch ID / security-key sign-ins. Revoking one doesn't lock them
+    out — password sign-in still works. They add passkeys themselves.
+  </p>
+  {% if passkeys %}
+  <div class="overflow"><table>
+    <thead><tr><th>Name</th><th>Added</th><th>Last used</th><th></th></tr></thead>
+    <tbody>
+      {% for pk in passkeys %}
+      <tr>
+        <td>{{ pk.name }}</td>
+        <td>{{ pk.created_at.strftime('%b %d, %Y') }}</td>
+        <td>{% if pk.last_used_at %}{{ pk.last_used_at.strftime('%b %d %H:%M') }}{% else %}never{% endif %}</td>
+        <td>
+          <form class="inline" method="post"
+                action="/ui/admin/principals/{{ principal.id }}/webauthn/{{ pk.id }}/revoke"
+                onsubmit="return confirm('Revoke this passkey?')">
+            <button class="danger" type="submit">revoke</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}
+  <p class="empty">None.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Password</h2>
+  <p class="sub">
+    Issues a one-time password and forces a change on their next sign-in.
+    Read it to them; it isn't stored anywhere you can retrieve it.
+  </p>
+  <form method="post" action="/ui/admin/principals/{{ principal.id }}/reset_password">
+    <button class="secondary" type="submit">Issue a temp password</button>
+  </form>
+</div>
+{% endif %}
+
+{% if principal.kind == 'service' and principal.owner %}
+<div class="card">
+  <h2>Delegated by {{ principal.owner }}</h2>
+  <p class="sub">
+    This service is a deputy of {{ principal.owner }}: its access is capped by
+    theirs, and it stops working if their account is disabled. Promote it to an
+    independent service if it needs to outlive them — production, for instance.
+  </p>
+  <form method="post" action="/ui/admin/principals/{{ principal.id }}/detach_owner"
+        onsubmit="return confirm('Promote to an independent service? It will no longer be capped by {{ principal.owner }}, and will survive their account being disabled.')">
+    <button class="secondary" type="submit">Promote to independent service</button>
+  </form>
+</div>
+{% endif %}
+
+{% if principal.kind == 'service' %}
+<div class="card">
+  <h2>Static keys</h2>
+  <p class="sub">
+    Service principals authenticate with keys only — no login, no OAuth. The
+    key carries exactly this principal's grants.
+  </p>
+  <form method="post" action="/ui/admin/principals/{{ principal.id }}/issue_key">
+    <div class="row">
+      <div><label for="key_name">Key name</label>
+        <input id="key_name" name="name" type="text" placeholder="e.g. acme-prod" required></div>
+      <div class="narrow-field"><button type="submit">Mint key</button></div>
+    </div>
+  </form>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Groups</h2>
+  <p class="sub">
+    Membership adds the group's grants to whatever this principal already has.
+    It can only widen — a per-connector or per-key limit still applies on top —
+    and removal bites on the very next call.
+  </p>
+  {% if memberships %}
+  <div class="overflow"><table>
+    <thead><tr><th>Group</th><th></th></tr></thead>
+    <tbody>
+      {% for g in memberships %}
+      <tr>
+        <td><a href="/ui/admin/groups/{{ g.id }}"><code>{{ g.name }}</code></a></td>
+        <td>
+          <form class="inline" method="post"
+                action="/ui/admin/principals/{{ principal.id }}/groups/{{ g.id }}/delete"
+                onsubmit="return confirm('Remove {{ principal.username }} from {{ g.name }}?')">
+            <button class="danger" type="submit">remove</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}
+  <p class="empty">In no groups.</p>
+  {% endif %}
+  {% if joinable %}
+  <form method="post" action="/ui/admin/principals/{{ principal.id }}/groups">
+    <div class="row">
+      <div><label for="group">Add to a group</label>
+        <select id="group" name="group_id" required>
+          <option value="">choose…</option>
+          {% for g in joinable %}<option value="{{ g.id }}">{{ g.name }}</option>{% endfor %}
+        </select></div>
+      <div class="narrow-field"><button class="secondary" type="submit">Add</button></div>
+    </div>
+  </form>
+  {% elif not memberships %}
+  <p class="muted" style="font-size:12.5px">
+    No groups exist yet — create one under <a href="/ui/admin/groups">Groups</a>.
+  </p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Rate limit</h2>
+  <p class="sub">
+    Calls per minute for any credential of theirs that doesn't set its own
+    number. Blank uses the gateway default. This is a brake on a stolen
+    credential, not a quota — a limit that trips in normal use is one someone
+    will turn off.
+  </p>
+  <form method="post" action="/ui/admin/principals/{{ principal.id }}/rate_limit">
+    <div class="row">
+      <div class="narrow-field">
+        <input name="rate_limit_per_min" type="number" min="1"
+               value="{{ principal.rate_limit_per_min or '' }}" placeholder="default">
+      </div>
+      <div class="narrow-field"><button class="secondary" type="submit">Save</button></div>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <h2>{% if principal.disabled_at %}Re-enable{% else %}Disable{% endif %}</h2>
+  <p class="sub">
+    {% if principal.disabled_at %}
+      Restores sign-in. Their grants are untouched, so access returns as it was.
+    {% else %}
+      Immediately revokes every token they hold and refuses their keys. Grants
+      are kept, so re-enabling restores exactly what they had.
+    {% endif %}
+  </p>
+  <form method="post" action="/ui/admin/principals/{{ principal.id }}/toggle_disabled">
+    <button class="{% if principal.disabled_at %}secondary{% else %}danger{% endif %}" type="submit">
+      {% if principal.disabled_at %}Re-enable account{% else %}Disable account{% endif %}
+    </button>
+  </form>
+</div>
+{% endblock %}

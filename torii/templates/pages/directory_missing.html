@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Not found — MCP directory — torii{% endblock %}
+{% block bare_content %}
+<div class="public">
+  <header class="public-head">
+    <div class="brand-lg"><a href="/directory" style="text-decoration:none"><span class="glyph">⛩</span> torii</a></div>
+    {% if message %}
+    <h1>Slow down</h1>
+    <p class="lede">{{ message }}</p>
+    {% else %}
+    <h1>No published server by that name</h1>
+    <p class="lede">
+      <code>{{ name }}</code> isn't in the public directory. It may not exist,
+      or it may be private — the directory doesn't distinguish, on purpose.
+    </p>
+    {% endif %}
+    <p><a class="button secondary" href="/directory">Browse the directory</a></p>
+  </header>
+</div>
+{% endblock %}

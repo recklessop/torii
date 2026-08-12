@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}OAuth clients — torii{% endblock %}
+{% block heading %}OAuth clients{% endblock %}
+{% block crumb %}every Claude surface that has registered{% endblock %}
+{% block content %}
+
+<div class="card">
+  <h2>Registered clients</h2>
+  <p class="sub">
+    Clients self-register (RFC 7591). Registration alone grants nothing — a
+    client with no principal has completed no authorization and can reach
+    nothing.
+  </p>
+  {% if clients %}
+  <div class="overflow"><table>
+    <thead><tr>
+      <th>Connector</th><th>Owner</th><th>Set up from</th>
+      <th>Live tokens</th><th>Access</th><th>Last seen</th><th></th>
+    </tr></thead>
+    <tbody>
+      {% for c in clients %}
+      <tr>
+        <td>
+          <strong>{{ c.display }}</strong>
+          <div class="muted" style="font-size:11.5px"><code>{{ c.client_id }}</code></div>
+          <form class="inline" method="post" action="/ui/admin/clients/{{ c.client_id }}/rename"
+                style="margin-top:6px;display:flex;gap:5px">
+            <input name="label" type="text" value="{{ c.label or '' }}"
+                   placeholder="rename: her phone, his laptop…"
+                   style="padding:3px 7px;font-size:12px;width:160px">
+            <button class="secondary" type="submit"
+                    style="margin:0;padding:3px 8px;font-size:11.5px">rename</button>
+          </form>
+        </td>
+        <td>{% if c.username %}{{ c.username }}{% else %}<span class="pill">not signed in yet</span>{% endif %}</td>
+        <td class="muted" style="font-size:12.5px">
+          {% if c.device %}{{ c.device }}{% else %}—{% endif %}
+          {% if c.first_seen_ip %}<div style="font-size:11.5px">{{ c.first_seen_ip }}</div>{% endif %}
+          <div style="font-size:11.5px">added {{ c.created_at.strftime('%Y-%m-%d') }}</div>
+        </td>
+        <td>{{ c.tokens }}</td>
+        <td>
+          {% if c.access_mode == 'narrowed' %}
+            <span class="pill">limited{% if c.grant_count %} · {{ c.grant_count }}{% else %} · none{% endif %}</span>
+          {% else %}<span class="pill ok">inherits</span>{% endif %}
+        </td>
+        <td class="muted">{% if c.last_seen_at %}{{ c.last_seen_at.strftime('%Y-%m-%d %H:%M') }}{% else %}never{% endif %}</td>
+        <td style="white-space:nowrap">
+          {% if c.disabled_at %}<span class="pill off">revoked</span>
+          {% else %}
+          <form class="inline" method="post" action="/ui/admin/clients/{{ c.client_id }}/revoke"
+                onsubmit="return confirm('Revoke this client and all its tokens?')">
+            <button class="danger" type="submit">revoke</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}
+  <p class="empty">No clients have registered yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

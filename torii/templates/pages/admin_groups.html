@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Groups — torii{% endblock %}
+{% block heading %}Groups{% endblock %}
+{% block crumb %}grant once, to everyone in it{% endblock %}
+{% block content %}
+
+<div class="card">
+  <h2>Create a group</h2>
+  <p class="sub">
+    A group is a named set of people and services. Grant a server to the group
+    and every member gets it — grants stay per-tool, and a group can only ever
+    <em>widen</em> what someone reaches, never narrow it. A per-connector or
+    per-key limit still applies on top.
+  </p>
+  <form method="post" action="/ui/admin/groups">
+    <div class="row">
+      <div><label for="grp_name">Name</label>
+        <input id="grp_name" name="name" type="text" required placeholder="family"></div>
+      <div><label for="grp_desc">Description</label>
+        <input id="grp_desc" name="description" type="text"
+               placeholder="What this group is for"></div>
+      <div><label for="grp_claim">IdP claim (optional)</label>
+        <input id="grp_claim" name="idp_claim" type="text" placeholder="leave empty"
+               title="The Authentik group name that should map onto this group once federated login lands"></div>
+      <div class="narrow-field"><button type="submit">Create</button></div>
+    </div>
+    <p class="muted" style="font-size:12.5px;margin-top:10px">
+      Leave the claim empty unless you already know the group name in your
+      identity provider. It does nothing yet — no federated login is wired up —
+      but a group with no claim can never be satisfied by one, which is the
+      safe default.
+    </p>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Groups</h2>
+  {% if groups %}
+  <div class="overflow"><table>
+    <thead><tr><th>Name</th><th>Members</th><th>Grants</th><th>IdP claim</th><th></th></tr></thead>
+    <tbody>
+      {% for g in groups %}
+      <tr>
+        <td>
+          <a href="/ui/admin/groups/{{ g.id }}"><code>{{ g.name }}</code></a>
+          {% if g.description %}<div class="muted" style="font-size:12px">{{ g.description }}</div>{% endif %}
+        </td>
+        <td>{{ g.member_count }}</td>
+        <td>
+          {% if g.grant_count %}{{ g.grant_count }}
+          {% else %}<span class="muted">none — it reaches nothing</span>{% endif %}
+        </td>
+        <td>{% if g.idp_claim %}<code>{{ g.idp_claim }}</code>
+            {% else %}<span class="muted">local only</span>{% endif %}</td>
+        <td style="white-space:nowrap">
+          <a class="button secondary" style="margin:0;padding:5px 10px;font-size:12.5px"
+             href="/ui/admin/groups/{{ g.id }}">edit</a>
+          <form class="inline" method="post" action="/ui/admin/groups/{{ g.id }}/delete"
+                onsubmit="return confirm('Delete {{ g.name }}? Its {{ g.grant_count }} grant(s) go with it, and its {{ g.member_count }} member(s) lose that access on their next call.')">
+            <button class="danger" type="submit">delete</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}
+  <p class="empty">No groups yet. Grants to individual people work exactly as before.</p>
+  {% endif %}
+</div>
+{% endblock %}

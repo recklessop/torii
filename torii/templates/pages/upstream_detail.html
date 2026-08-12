@@ -1,0 +1,283 @@
+{% extends "base.html" %}
+{% block title %}{{ upstream.name }} — torii{% endblock %}
+{% block heading %}{{ upstream.display_name or upstream.name }}{% endblock %}
+{% block crumb %}<a href="/ui/admin/upstreams">← all servers</a>{% endblock %}
+{% block content %}
+
+{% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+<div class="card">
+  <h2>Client URLs</h2>
+  <div class="overflow"><table>
+    <tbody>
+      <tr><th style="width:190px">This server only</th>
+          <td><code>{{ base_url }}/{{ upstream.name }}/mcp</code></td></tr>
+      <tr><th>Aggregate</th>
+          <td><code>{{ base_url }}/mcp</code>, tools prefixed <code>{{ upstream.name }}__</code></td></tr>
+      {% if upstream.public_listed %}
+      <tr><th>Public listing</th><td><a href="/directory/{{ upstream.name }}">/directory/{{ upstream.name }}</a></td></tr>
+      {% endif %}
+    </tbody>
+  </table></div>
+</div>
+
+<div class="card">
+  <h2>Settings</h2>
+  <form method="post" action="/ui/admin/upstreams/{{ upstream.id }}">
+    <div class="row">
+      <div><label for="slug">Slug — URL segment and tool prefix</label>
+        <input id="slug" name="name" type="text" value="{{ upstream.name }}" required
+               pattern="[a-z0-9][a-z0-9-]{0,62}"
+               title="lowercase letters, digits and dashes"></div>
+      <div><label for="display_name">Display name</label>
+        <input id="display_name" name="display_name" type="text"
+               value="{{ upstream.display_name or '' }}" placeholder="e.g. Work Knowledge"></div>
+    </div>
+    <p class="muted" style="font-size:12.5px;margin-top:6px">
+      Changing the slug changes <code>/&lt;slug&gt;/mcp</code> and every tool
+      name on the aggregate endpoint, so connected clients will need their
+      config updated. Grants follow the server itself and are unaffected.
+    </p>
+
+    <div class="row">
+      <div class="narrow-field"><label for="timeout_seconds">Timeout (s)</label>
+        <input id="timeout_seconds" name="timeout_seconds" type="number" min="1" max="300"
+               value="{{ upstream.timeout_seconds }}"></div>
+    </div>
+
+    <label for="description">Description</label>
+    <input id="description" name="description" type="text" value="{{ upstream.description or '' }}"
+           placeholder="One line — shown in the admin list and the directory">
+
+    <label for="public_summary">Public summary (directory)</label>
+    <textarea id="public_summary" name="public_summary" rows="3"
+              placeholder="Longer copy for the public directory. Falls back to the description.">{{ upstream.public_summary or '' }}</textarea>
+
+    <div class="row">
+      <div><label for="public_url">Project homepage (optional)</label>
+        <input id="public_url" name="public_url" type="url" value="{{ upstream.public_url or '' }}"></div>
+      <div><label for="public_listed">Public directory</label>
+        <select id="public_listed" name="public_listed">
+          <option value="" {{ '' if upstream.public_listed else 'selected' }}>private</option>
+          <option value="1" {{ 'selected' if upstream.public_listed else '' }}>listed publicly</option>
+        </select></div>
+      <div><label for="enabled">State</label>
+        <select id="enabled" name="enabled">
+          <option value="1" {{ 'selected' if upstream.enabled else '' }}>enabled</option>
+          <option value="" {{ '' if upstream.enabled else 'selected' }}>disabled</option>
+        </select></div>
+    </div>
+
+    <h3>Upstream credential</h3>
+    <div class="row">
+      <div><label for="auth_header_name">Header name</label>
+        <input id="auth_header_name" name="auth_header_name" type="text"
+               value="{{ upstream.auth_header_name or '' }}" placeholder="Authorization"></div>
+      <div><label for="auth_header_value">Header value</label>
+        <input id="auth_header_value" name="auth_header_value" type="text"
+               placeholder="{% if upstream.has_auth_value %}unchanged — type to replace{% else %}Bearer …{% endif %}"></div>
+    </div>
+    <p class="muted" style="font-size:12.5px;margin-top:6px">
+      Write-only: torii never displays a stored credential, and leaving the
+      value blank keeps the existing one. Clear it with the button below.
+    </p>
+
+    <button type="submit">Save changes</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Tools</h2>
+  <p class="sub">
+    What this server advertises right now, asked of the server itself rather
+    than remembered — so a tool that's been added or removed shows up here
+    without anyone updating a list.
+  </p>
+  <div class="row" style="align-items:center;gap:var(--s3)">
+    <span class="muted" id="tools-msg" style="flex:1;font-size:13.5px">loading…</span>
+    <span style="flex:0 0 auto">
+      <button type="button" class="secondary" id="tools-refresh" style="margin:0">refresh</button>
+    </span>
+  </div>
+  <div class="overflow" id="tools-table" hidden style="margin-top:var(--s3)">
+    <table>
+      <thead><tr>
+        <th style="width:26%">Tool</th>
+        <th style="width:30%">Called as</th>
+        <th>What it does</th>
+      </tr></thead>
+      <tbody id="tools-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Upstream endpoints</h2>
+  <p class="sub">
+    Where this server actually runs. With more than one, torii spreads callers
+    across them — and pins a caller to whichever replica issued their session,
+    so a session-based server keeps working. A call is only retried on another
+    replica when it provably never reached the first, so a tool never runs
+    twice.
+  </p>
+
+  <div class="overflow"><table>
+    <thead><tr>
+      <th>URL</th><th style="width:110px">Rotation</th><th>Health</th><th style="width:1%"></th>
+    </tr></thead>
+    <tbody>
+      {% for e in endpoints %}
+      <tr>
+        <td><code>{{ e.url }}</code></td>
+        <td>{% if e.enabled %}<span class="pill ok">in</span>
+            {% else %}<span class="pill off">out</span>{% endif %}</td>
+        <td class="muted" style="font-size:12.5px">
+          {% if e.last_health_at %}
+            {% if e.last_health_ok %}<span class="pill ok">ok</span>
+            {% else %}<span class="pill off">failed</span>{% endif %}
+            {{ e.last_health_at.strftime('%Y-%m-%d %H:%M:%S') }}
+            {% if e.last_health_error %}<br><code>{{ e.last_health_error }}</code>{% endif %}
+          {% else %}never checked{% endif %}
+        </td>
+        <td style="white-space:nowrap">
+          <form class="inline" method="post"
+                action="/ui/admin/upstreams/{{ upstream.id }}/endpoints/{{ e.id }}/toggle">
+            <button class="secondary" type="submit">{% if e.enabled %}take out{% else %}put back{% endif %}</button>
+          </form>
+          <form class="inline" method="post"
+                action="/ui/admin/upstreams/{{ upstream.id }}/endpoints/{{ e.id }}/delete"
+                onsubmit="return confirm('Remove this endpoint?')">
+            <button class="secondary" type="submit">remove</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="empty">No endpoints — this server can't be reached.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+
+  <form method="post" action="/ui/admin/upstreams/{{ upstream.id }}/endpoints"
+        style="margin-top:var(--s3)">
+    <div class="row">
+      <div><label for="new_endpoint">Add an endpoint</label>
+        <input id="new_endpoint" name="url" type="url" required
+               placeholder="http://127.0.0.1:8500/mcp"></div>
+      <div class="narrow-field"><button type="submit">Add</button></div>
+    </div>
+  </form>
+
+  <form method="post" action="/ui/admin/upstreams/{{ upstream.id }}/check"
+        style="margin-top:var(--s3)">
+    <button class="secondary" type="submit">Check every endpoint</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Danger zone</h2>
+  <div class="row">
+    {% if upstream.has_auth_value %}
+    <div>
+      <form method="post" action="/ui/admin/upstreams/{{ upstream.id }}/clear_credential"
+            onsubmit="return confirm('Clear the stored upstream credential?')">
+        <button class="secondary" type="submit">Clear stored credential</button>
+      </form>
+    </div>
+    {% endif %}
+    <div>
+      <form method="post" action="/ui/admin/upstreams/{{ upstream.id }}/delete"
+            onsubmit="return confirm('Delete this server? Its {{ upstream.grant_count }} grant(s) go with it. Audit history is kept.')">
+        <button class="danger" type="submit">Delete server</button>
+      </form>
+    </div>
+  </div>
+  <p class="muted" style="font-size:12.5px;margin-top:10px">
+    Deleting removes the server and its {{ upstream.grant_count }} grant(s).
+    Audit rows keep the server's name, so history survives.
+  </p>
+</div>
+{% endblock %}
+
+{% block page_script %}
+<script>
+// The tools a server offers, loaded after paint so a slow or dead upstream
+// can't hold up the page — the admin still needs the settings form above it.
+(function () {
+  var body = document.getElementById('tools-body');
+  var table = document.getElementById('tools-table');
+  var msg = document.getElementById('tools-msg');
+  var refresh = document.getElementById('tools-refresh');
+  if (!body) return;
+
+  function pill(text, kind) {
+    var span = document.createElement('span');
+    span.className = 'pill' + (kind ? ' ' + kind : '');
+    span.textContent = text;
+    return span;
+  }
+
+  async function load() {
+    msg.textContent = 'asking the server…';
+    table.hidden = true;
+    body.innerHTML = '';
+    try {
+      var response = await fetch('/ui/admin/upstreams/{{ upstream.id }}/tools.json');
+      var data = await response.json();
+      if (!response.ok) {
+        // A dead upstream is a fact worth stating, not an empty table that
+        // reads as "this server has no tools".
+        msg.textContent = 'Could not reach it: ' + (data.error || response.status);
+        return;
+      }
+      if (!data.tools.length) { msg.textContent = 'It reports no tools.'; return; }
+
+      data.tools.forEach(function (tool) {
+        var row = document.createElement('tr');
+
+        var name = document.createElement('td');
+        var code = document.createElement('code');
+        code.textContent = tool.name;
+        name.append(code);
+        if (tool.read_only === true) name.append(' ', pill('read-only', 'ok'));
+        else if (tool.read_only === false || tool.destructive === true) {
+          name.append(' ', pill('may modify data', 'off'));
+        }
+
+        var called = document.createElement('td');
+        var direct = document.createElement('div');
+        var dcode = document.createElement('code');
+        dcode.textContent = tool.name;
+        direct.append(dcode);
+        var hint = document.createElement('div');
+        hint.className = 'muted';
+        hint.style.fontSize = '11.5px';
+        hint.textContent = 'on /{{ upstream.name }}/mcp';
+        var agg = document.createElement('div');
+        var acode = document.createElement('code');
+        acode.textContent = '{{ upstream.name }}__' + tool.name;
+        agg.append(acode);
+        var hint2 = document.createElement('div');
+        hint2.className = 'muted';
+        hint2.style.fontSize = '11.5px';
+        hint2.textContent = 'on /mcp';
+        called.append(direct, hint, agg, hint2);
+
+        var desc = document.createElement('td');
+        desc.className = 'muted';
+        desc.textContent = tool.description || '—';
+
+        row.append(name, called, desc);
+        body.append(row);
+      });
+      table.hidden = false;
+      msg.textContent = data.tools.length + ' tool' + (data.tools.length === 1 ? '' : 's');
+    } catch (e) {
+      msg.textContent = 'Could not reach it: ' + e;
+    }
+  }
+
+  load();
+  if (refresh) refresh.addEventListener('click', load);
+})();
+</script>
+{% endblock %}

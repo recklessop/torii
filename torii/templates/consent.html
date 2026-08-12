@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Authorize a connection — torii{% endblock %}
+{% block bare_content %}
+<div class="card narrow">
+  <h1>⛩ Authorize</h1>
+  <p class="sub">
+    <strong>{{ client_name }}</strong> is asking to connect to your torii
+    account and act with your access.
+  </p>
+
+  <div class="entity" style="margin:var(--s3) 0">
+    <div class="sub2">This connection would send codes to:</div>
+    <div class="name"><code>{{ redirect_host }}</code></div>
+    <div class="sub2" style="margin-top:var(--s2)">
+      Only approve this if you recognise that address. Requested scope:
+      <code>{{ scope }}</code>.
+    </div>
+  </div>
+
+  <p class="muted" style="font-size:13px">
+    Signed in as <strong>{{ session.username }}</strong>. Approving grants this
+    connector the access your account already has; you can revoke it any time on
+    the Connectors page.
+  </p>
+
+  <form method="post" action="/authorize/consent" style="display:flex;gap:var(--s2)">
+    <input type="hidden" name="request_id" value="{{ request_id }}">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <button type="submit" name="decision" value="approve">Approve</button>
+    <button type="submit" name="decision" value="deny" class="secondary">Deny</button>
+  </form>
+</div>
+{% endblock %}

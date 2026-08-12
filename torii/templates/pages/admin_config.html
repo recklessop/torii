@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Config export — torii{% endblock %}
+{% block heading %}Config export{% endblock %}
+{% block crumb %}principals, servers and grants as JSON{% endblock %}
+{% block content %}
+
+<div class="card">
+  <h2>Export</h2>
+  <p class="sub">
+    The actionable state of the gateway — principals, upstreams and grants —
+    as JSON. No secrets: no password hashes, no key hashes, no upstream auth
+    headers. Useful for review, for diffing after a change, and for rebuilding
+    a stack by hand.
+  </p>
+  <p><a class="button" href="/ui/admin/config.json">Download torii-config.json</a></p>
+</div>
+
+<div class="card">
+  <h2>What's in it</h2>
+  <div class="overflow"><table>
+    <tbody>
+      <tr><th style="width:150px">principals</th><td>username, kind, admin flag, 2FA requirement, disabled state</td></tr>
+      <tr><th>upstreams</th><td>name, endpoint URLs, auth header <em>name</em> only, timeout, enabled, public listing</td></tr>
+      <tr><th>groups</th><td>name, description, IdP claim, and who's in each one</td></tr>
+      <tr><th>grants</th><td>subject (principal / client / key / group), server, tool scope</td></tr>
+    </tbody>
+  </table></div>
+</div>
+{% endblock %}

@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Upstreams — torii{% endblock %}
+{% block heading %}Upstream servers{% endblock %}
+{% block crumb %}the MCP servers torii fronts{% endblock %}
+{% block content %}
+
+<div class="card">
+  <h2>Register a server</h2>
+  <form method="post" action="/ui/admin/upstreams">
+    <div class="row">
+      <div><label for="up_name">Slug</label>
+        <input id="up_name" name="name" type="text" required
+               pattern="[a-z0-9][a-z0-9-]{0,62}"
+               placeholder="knowledge"
+               title="lowercase letters, digits and dashes — becomes /<slug>/mcp and the tool prefix">
+      </div>
+      <div><label for="up_display">Display name</label>
+        <input id="up_display" name="display_name" type="text" placeholder="Work Knowledge"></div>
+      <div><label for="up_url">LAN URL</label>
+        <input id="up_url" name="url" type="url" required placeholder="http://127.0.0.1:8500/mcp"
+               title="the first endpoint — add more replicas on the server's page"></div>
+      <div class="narrow-field"><label for="up_timeout">Timeout (s)</label>
+        <input id="up_timeout" name="timeout_seconds" type="number" min="1" max="300" value="30"></div>
+    </div>
+    <label for="up_desc">Description</label>
+    <input id="up_desc" name="description" type="text"
+           placeholder="What this server is for — shown in the public directory if listed">
+    <div class="row">
+      <div><label for="up_hdr_name">Auth header name (optional)</label>
+        <input id="up_hdr_name" name="auth_header_name" type="text" placeholder="Authorization"></div>
+      <div><label for="up_hdr_val">Auth header value (write-only)</label>
+        <input id="up_hdr_val" name="auth_header_value" type="text" placeholder="Bearer …"></div>
+      <div><label for="up_public">Public directory</label>
+        <select id="up_public" name="public_listed">
+          <option value="">private — signed-in users only</option>
+          <option value="1">listed publicly</option>
+        </select></div>
+      <div class="narrow-field"><button type="submit">Register</button></div>
+    </div>
+    <p class="muted" style="font-size:12.5px;margin-top:10px">
+      A public listing publishes the server's name, description and tool list at
+      <a href="/directory">/directory</a> for search engines, agents and humans.
+      It never publishes the LAN URL or the auth header, and it grants nobody
+      access — callers still need a grant.
+    </p>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Registered servers</h2>
+  {% if upstreams %}
+  <div class="overflow"><table>
+    <thead><tr><th>Name</th><th>Endpoints</th><th>State</th><th>Directory</th><th>Health</th><th></th></tr></thead>
+    <tbody>
+      {% for u in upstreams %}
+      <tr>
+        <td>
+          <a href="/ui/admin/upstreams/{{ u.id }}"><code>{{ u.name }}</code></a>
+          {% if u.display_name %}<div style="font-size:12.5px">{{ u.display_name }}</div>{% endif %}
+          {% if u.description %}<div class="muted" style="font-size:12px">{{ u.description }}</div>{% endif %}
+          <div class="muted" style="font-size:11.5px"><code>/{{ u.name }}/mcp</code></div>
+        </td>
+        <td class="muted" style="font-size:12.5px">
+          {% for url in u.urls %}<div>{{ url }}</div>{% else %}<em>none</em>{% endfor %}
+          {% if u.endpoint_count > 1 %}
+          <div style="font-size:11.5px">{{ u.enabled_count }} of {{ u.endpoint_count }} in rotation</div>
+          {% endif %}
+        </td>
+        <td>{% if u.enabled %}<span class="pill ok">enabled</span>{% else %}<span class="pill off">off</span>{% endif %}</td>
+        <td>
+          {% if u.public_listed %}<a href="/directory/{{ u.name }}"><span class="pill ok">public</span></a>
+          {% else %}<span class="pill">private</span>{% endif %}
+        </td>
+        <td class="muted">
+          {% if u.checked_count == 0 %}not checked
+          {% elif u.healthy_count == u.checked_count %}
+            <span class="pill ok">{{ u.healthy_count }}/{{ u.checked_count }} ok</span>
+          {% else %}
+            <span class="pill off">{{ u.healthy_count }}/{{ u.checked_count }} ok</span>
+          {% endif %}
+        </td>
+        <td style="white-space:nowrap">
+          <form class="inline" method="post" action="/ui/admin/upstreams/{{ u.id }}/toggle">
+            <button class="secondary" type="submit">{% if u.enabled %}disable{% else %}enable{% endif %}</button>
+          </form>
+          <form class="inline" method="post" action="/ui/admin/upstreams/{{ u.id }}/toggle_public">
+            <button class="secondary" type="submit">{% if u.public_listed %}unlist{% else %}list publicly{% endif %}</button>
+          </form>
+          <form class="inline" method="post" action="/ui/admin/upstreams/{{ u.id }}/check">
+            <button class="secondary" type="submit">check</button>
+          </form>
+          <a class="button secondary" style="margin:0;padding:5px 10px;font-size:12.5px"
+             href="/ui/admin/upstreams/{{ u.id }}">edit</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}
+  <p class="empty">No servers registered yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

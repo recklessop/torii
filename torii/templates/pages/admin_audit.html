@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Audit log — torii{% endblock %}
+{% block heading %}Audit log{% endblock %}
+{% block crumb %}every call and every auth event, kept one year{% endblock %}
+{% block content %}
+
+<div class="card">
+  <form method="get" action="/ui/admin/audit">
+    <div class="row">
+      <div><label for="f_principal">Principal</label>
+        <input id="f_principal" name="principal" type="text" value="{{ filters.principal or '' }}"
+               placeholder="username"></div>
+      <div><label for="f_upstream">Server</label>
+        <input id="f_upstream" name="upstream" type="text" value="{{ filters.upstream or '' }}"
+               placeholder="name"></div>
+      <div><label for="f_outcome">Outcome</label>
+        <select id="f_outcome" name="outcome">
+          <option value="">any</option>
+          {% for o in ['ok', 'denied', 'error', 'upstream_error'] %}
+          <option value="{{ o }}" {{ 'selected' if filters.outcome == o }}>{{ o }}</option>
+          {% endfor %}
+        </select></div>
+      <div><label for="f_view">View</label>
+        <select id="f_view" name="view">
+          <option value="calls" {{ 'selected' if filters.view != 'auth' }}>tool calls</option>
+          <option value="auth" {{ 'selected' if filters.view == 'auth' }}>auth events</option>
+        </select></div>
+      <div class="narrow-field"><button type="submit">Filter</button></div>
+    </div>
+  </form>
+</div>
+
+{% if filters.view == 'auth' %}
+<div class="card">
+  <h2>Auth events</h2>
+  {% if events %}
+  <div class="overflow"><table>
+    <thead><tr><th>When</th><th>Event</th><th>Principal</th><th>Client</th><th>IP</th><th>Detail</th></tr></thead>
+    <tbody>
+      {% for e in events %}
+      <tr>
+        <td class="muted" style="white-space:nowrap">{{ e.ts.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+        <td>
+          {% if e.outcome == 'ok' %}<span class="pill ok">{{ e.event }}</span>
+          {% else %}<span class="pill off">{{ e.event }}</span>{% endif %}
+        </td>
+        <td>{{ e.principal_label or '—' }}</td>
+        <td class="muted" style="font-size:12px">{{ e.client_id or '—' }}</td>
+        <td class="muted">{{ e.ip or '—' }}</td>
+        <td class="muted" style="font-size:12px">{{ e.detail }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}<p class="empty">No auth events match.</p>{% endif %}
+</div>
+{% else %}
+<div class="card">
+  <h2>Tool calls</h2>
+  {% if rows %}
+  <div class="overflow"><table>
+    <thead><tr>
+      <th>When</th><th>Principal</th><th>Via</th>
+      <th>Server · Tool</th><th>Outcome</th><th>Latency</th>
+    </tr></thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td class="muted" style="white-space:nowrap">{{ row.ts.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+        <td>{{ row.principal_label or '—' }}</td>
+        <td class="muted" style="font-size:12px">{{ row.via }}</td>
+        <td class="tools"><code>{{ row.upstream_name or '—' }}</code>{% if row.tool_name %} · {{ row.tool_name }}{% endif %}
+          {# Which replica served it — without this, debugging a flaky backend
+             behind several endpoints is guesswork. #}
+          {% if row.endpoint_url %}<div class="muted" style="font-size:11.5px">{{ row.endpoint_url }}</div>{% endif %}
+        </td>
+        <td>
+          {% if row.outcome == 'ok' %}<span class="pill ok">ok</span>
+          {% elif row.outcome == 'denied' %}<span class="pill off">{{ row.error_code or 'denied' }}</span>
+          {% else %}<span class="pill">{{ row.error_code or row.outcome }}</span>{% endif %}
+        </td>
+        <td class="muted">{% if row.latency_ms is not none %}{{ row.latency_ms }} ms{% else %}—{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}<p class="empty">No calls match.</p>{% endif %}
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,62 @@
+# torii — public deployment compose (#81).
+#
+# Builds the gateway from source in this repo and runs it with Postgres and
+# valkey on a private docker network. Nothing here has an insecure default:
+# both datastore passwords are REQUIRED (compose errors if unset) and neither
+# datastore publishes a port to the host.
+#
+# Quickstart:
+#   cp .env.example .env      # then fill in POSTGRES_PASSWORD, VALKEY_PASSWORD,
+#                             # SESSION_SECRET, PUBLIC_BASE_URL, ...
+#   docker compose up -d
+services:
+  torii:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8400:8400"
+    environment:
+      DATABASE_URL: postgresql://torii:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/torii
+      VALKEY_URL: redis://:${VALKEY_PASSWORD:?set VALKEY_PASSWORD in .env}@valkey:6379/0
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?set PUBLIC_BASE_URL in .env}
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in .env}
+      SESSION_HTTPS_ONLY: ${SESSION_HTTPS_ONLY:-true}
+      TORII_ENCRYPTION_KEY: ${TORII_ENCRYPTION_KEY:-}
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      - postgres
+      - valkey
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: torii
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: torii
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # No `ports:` — reachable only on the internal docker network.
+
+  valkey:
+    image: valkey/valkey:8-alpine
+    restart: unless-stopped
+    # Require a password so the cache (sessions, OAuth state, rate-limit
+    # counters) is not open to anything that reaches the network.
+    command: ["valkey-server", "--requirepass", "${VALKEY_PASSWORD:?set VALKEY_PASSWORD in .env}"]
+    # No `ports:` — reachable only on the internal docker network.
+
+  # Optional: expose torii over a Cloudflare tunnel instead of publishing a
+  # port. Bring your own tunnel token. Enable with:
+  #   docker compose --profile tunnel up -d cloudflared
+  cloudflared:
+    profiles: ["tunnel"]
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: ["tunnel", "--no-autoupdate", "run", "--token", "${TUNNEL_TOKEN}"]
+    depends_on:
+      - torii
+
+volumes:
+  pgdata:

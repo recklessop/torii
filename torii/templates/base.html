@@ -1,0 +1,732 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script>
+  // Applied before first paint, so a chosen theme doesn't flash the other one.
+  // data-theme wins over prefers-color-scheme in the stylesheet below.
+  (function () {
+    try {
+      var choice = localStorage.getItem('torii:theme');
+      if (choice === 'light' || choice === 'dark') {
+        document.documentElement.setAttribute('data-theme', choice);
+      }
+    } catch (e) { /* storage blocked — the OS preference stands */ }
+  })();
+  </script>
+  <!-- Everything except the public directory stays out of search results. -->
+  <meta name="robots" content="{{ robots or 'noindex, nofollow' }}">
+  <title>{% block title %}torii{% endblock %}</title>
+  {% block extra_head %}{% endblock %}
+  <style>
+    :root {
+      --bg: #0f1115; --panel: #171a21; --panel-2: #1d212a; --line: #262b36;
+      --text: #e6e9ef; --muted: #98a0b2; --accent: #d9713c; --accent-soft: rgba(217,113,60,.14);
+      --danger: #e05561; --ok: #57a773; --sidebar: 250px;
+      /* One scale, so spacing is consistent instead of chosen per rule. */
+      --s1: 6px; --s2: 10px; --s3: 16px; --s4: 22px; --s5: 30px; --s6: 44px;
+      --radius: 12px;
+    }
+    /* One light palette, applied either by OS preference or by explicit
+       choice. data-theme has to win in BOTH directions, or the toggle can't
+       override the OS. */
+    @media (prefers-color-scheme: light) {
+      :root:not([data-theme="dark"]) {
+        --bg: #f4f5f8; --panel: #ffffff; --panel-2: #f8f9fb; --line: #e1e4ea;
+        --text: #1b1f27; --muted: #626b7d; --accent: #c25a24; --accent-soft: rgba(194,90,36,.10);
+      }
+    }
+    :root[data-theme="light"] {
+      --bg: #f4f5f8; --panel: #ffffff; --panel-2: #f8f9fb; --line: #e1e4ea;
+      --text: #1b1f27; --muted: #626b7d; --accent: #c25a24; --accent-soft: rgba(194,90,36,.10);
+    }
+    :root[data-theme="dark"] {
+      --bg: #0f1115; --panel: #171a21; --panel-2: #1d212a; --line: #262b36;
+      --text: #e6e9ef; --muted: #98a0b2; --accent: #d9713c; --accent-soft: rgba(217,113,60,.14);
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text);
+      font: 15.5px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: inherit; }
+
+    /* ---------- app shell ---------- */
+    .shell { display: flex; min-height: 100vh; }
+
+    .sidebar {
+      width: var(--sidebar); flex: 0 0 var(--sidebar);
+      background: var(--panel); border-right: 1px solid var(--line);
+      display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh;
+    }
+    .brand {
+      display: flex; align-items: center; gap: 9px;
+      padding: 18px 18px 14px; font-weight: 700; letter-spacing: .02em;
+    }
+    .brand .glyph { color: var(--accent); font-size: 19px; }
+    .brand small { display: block; color: var(--muted); font-weight: 400; font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; }
+
+    .nav { flex: 1 1 auto; overflow-y: auto; padding: 6px 10px 18px; }
+    .nav-section { margin-top: 16px; }
+    .nav-section:first-child { margin-top: 4px; }
+    .nav-label {
+      padding: 6px 10px; font-size: 11px; font-weight: 600; letter-spacing: .08em;
+      text-transform: uppercase; color: var(--muted);
+    }
+    .nav a {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 10px; margin: 1px 0; border-radius: 7px;
+      color: var(--muted); text-decoration: none; font-size: 14px;
+    }
+    .nav a:hover { background: var(--panel-2); color: var(--text); }
+    .nav a.active { background: var(--accent-soft); color: var(--text); font-weight: 600; }
+    .nav a.active .ico { color: var(--accent); }
+    .nav .ico { width: 17px; text-align: center; font-size: 14px; opacity: .95; }
+    .nav .count {
+      margin-left: auto; font-size: 11.5px; color: var(--muted);
+      background: var(--panel-2); border: 1px solid var(--line);
+      border-radius: 999px; padding: 0 7px;
+    }
+
+    /* user menu, pinned bottom-left */
+    .usermenu { border-top: 1px solid var(--line); padding: 12px; }
+    .usermenu details { position: relative; }
+    .usermenu summary {
+      list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px;
+      padding: 8px; border-radius: 8px;
+    }
+    .usermenu summary::-webkit-details-marker { display: none; }
+    .usermenu summary:hover { background: var(--panel-2); }
+    .avatar {
+      width: 30px; height: 30px; flex: 0 0 30px; border-radius: 50%;
+      background: var(--accent-soft); color: var(--accent);
+      display: grid; place-items: center; font-weight: 700; font-size: 13px;
+    }
+    .who { min-width: 0; }
+    .who .name { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .who .role { font-size: 11.5px; color: var(--muted); }
+    .usermenu .chev { margin-left: auto; color: var(--muted); font-size: 11px; }
+    .usermenu .menu {
+      position: absolute; bottom: calc(100% + 8px); left: 0; right: 0;
+      background: var(--panel-2); border: 1px solid var(--line); border-radius: 9px;
+      padding: 6px; box-shadow: 0 12px 28px rgba(0,0,0,.28);
+    }
+    .usermenu .menu a {
+      display: block; padding: 8px 10px; border-radius: 6px;
+      font-size: 13.5px; color: var(--text); text-decoration: none;
+    }
+    .usermenu .menu a:hover { background: var(--panel); }
+    .usermenu .menu a.danger { color: var(--danger); }
+    .usermenu .menu-head {
+      padding: 6px 10px 8px; font-size: 12px; color: var(--muted);
+      border-bottom: 1px solid var(--line); margin-bottom: 4px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .usermenu .menu-section { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 4px; }
+    .usermenu .menu-section:first-of-type { border-top: 0; margin-top: 0; padding-top: 0; }
+    .usermenu .menu-label {
+      padding: 6px 10px 2px; font-size: 10.5px; font-weight: 700;
+      letter-spacing: .05em; text-transform: uppercase; color: var(--muted);
+    }
+    .usermenu details[open] .chev { transform: rotate(180deg); display: inline-block; }
+
+    /* ---------- content ---------- */
+    .content { flex: 1 1 auto; min-width: 0; }
+    .topbar {
+      display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+      padding: var(--s5) var(--s5) 0;
+    }
+    .topbar h1 { font-size: 20px; margin: 0; }
+    .topbar .crumb { color: var(--muted); font-size: 13px; }
+    .page { padding: var(--s4) var(--s5) var(--s6); max-width: 1400px; }
+    /* Prose stays readable even though tables get the full width. */
+    .page > .card > p.sub, .page > .card > .muted { max-width: 78ch; }
+
+    .card {
+      background: var(--panel); border: 1px solid var(--line);
+      border-radius: var(--radius); padding: var(--s4) var(--s5);
+      margin-bottom: var(--s4);
+    }
+    .card > h2:first-child, .card > h1:first-child { margin-top: 0; }
+    .card.narrow { max-width: 420px; margin: 9vh auto 0; }
+    /* Auth pages are shell-less on purpose — no nav before you're
+       authenticated — but they should still read as the same product. */
+    .card.narrow h1 { font-size: 22px; letter-spacing: -.01em; }
+    .card.narrow .sub { font-size: 14.5px; }
+
+    h2 { font-size: 16.5px; margin: var(--s4) 0 var(--s2); }
+    h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
+         color: var(--muted); margin: 22px 0 8px; }
+    p.sub { color: var(--muted); margin: 0 0 var(--s3); font-size: 14.5px; }
+
+    label { display: block; margin: 13px 0 6px; color: var(--muted); font-size: 12.5px; }
+    input[type=text], input[type=password], input[type=url], input[type=number],
+    select, textarea {
+      width: 100%; padding: 9px 11px; background: var(--bg); color: var(--text);
+      border: 1px solid var(--line); border-radius: 7px; font: inherit;
+    }
+    input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+    button, .button {
+      margin-top: 16px; padding: 9px 15px; background: var(--accent); color: #fff;
+      border: 0; border-radius: 7px; font: inherit; font-weight: 600; font-size: 14px;
+      cursor: pointer; text-decoration: none; display: inline-block;
+    }
+    button:hover, .button:hover { filter: brightness(1.07); }
+    button.secondary, .button.secondary {
+      background: transparent; color: var(--text); border: 1px solid var(--line);
+    }
+    button.danger { background: var(--danger); }
+
+    .error, .notice, .secret {
+      padding: 11px 13px; border-radius: 8px; margin: 14px 0; font-size: 14px;
+    }
+    .error { background: rgba(224,85,97,.12); border: 1px solid var(--danger); }
+    .notice { background: rgba(87,167,115,.12); border: 1px solid var(--ok); }
+    .secret {
+      background: var(--accent-soft); border: 1px solid var(--accent);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-all;
+    }
+
+    table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+    th, td {
+      text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+    tbody tr:hover { background: var(--panel-2); }
+    th { color: var(--muted); font-weight: 600; font-size: 11px;
+         text-transform: uppercase; letter-spacing: .05em; }
+    tbody tr:last-child td { border-bottom: 0; }
+    td.tools { font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
+    .muted { color: var(--muted); }
+    .overflow { overflow-x: auto; }
+
+    .pill {
+      display: inline-block; padding: 2px 8px; border-radius: 999px;
+      border: 1px solid var(--line); font-size: 11.5px; color: var(--muted);
+    }
+    .pill.ok { color: var(--ok); border-color: var(--ok); }
+    .pill.off { color: var(--danger); border-color: var(--danger); }
+    code { font-family: ui-monospace, Menlo, monospace; font-size: 13px; word-break: break-all; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+    .row > * { flex: 1 1 190px; }
+    .row > .narrow-field { flex: 0 0 130px; }
+    form.inline { display: inline; }
+    form.inline button { margin: 0 2px 0 0; padding: 5px 10px; font-size: 12.5px; }
+
+    .stats { display: flex; gap: var(--s3); flex-wrap: wrap; margin-bottom: var(--s4); }
+    .stat {
+      flex: 1 1 170px; background: var(--panel); border: 1px solid var(--line);
+      border-radius: var(--radius); padding: var(--s3) var(--s4);
+    }
+    .stat .n { font-size: 22px; font-weight: 700; }
+    .stat .k { font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+
+    /* URL + copy control. Used on My tools, Connectors, Overview and the
+       public directory, so it lives here rather than in one page. */
+    .urlcopy { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; }
+    .urlcopy code { word-break: break-all; }
+    .copybtn {
+      flex: 0 0 auto; margin: 0; padding: 3px 8px; font-size: 11.5px; font-weight: 600;
+      background: transparent; color: var(--muted); border: 1px solid var(--line);
+      border-radius: 6px; cursor: pointer; line-height: 1.5;
+    }
+    .copybtn:hover { color: var(--text); border-color: var(--accent); filter: none; }
+    .copybtn.copied { color: var(--ok); border-color: var(--ok); }
+
+    /* Tool picker on the grant editor: ticked tools with their descriptions,
+       so an operator isn't recalling names from memory. */
+    .toolpick {
+      display: flex; flex-direction: column; gap: 2px; margin: 12px 0 4px;
+      max-height: 340px; overflow-y: auto;
+      border: 1px solid var(--line); border-radius: 9px; padding: 8px;
+    }
+    .toolrow {
+      display: flex; align-items: center; gap: 9px; padding: 7px 9px;
+      border-radius: 7px; font-size: 13.5px; margin: 0; color: var(--text);
+    }
+    .toolrow:hover { background: var(--panel-2); }
+    .toolrow input { width: auto; margin: 0; flex: 0 0 auto; }
+    .toolname { font-family: ui-monospace, Menlo, monospace; font-weight: 600; flex: 0 0 auto; }
+    .tooldesc {
+      color: var(--muted); flex: 1 1 auto; overflow: hidden;
+      text-overflow: ellipsis; white-space: nowrap; font-size: 13px;
+    }
+
+    /* Per-connector scope editor (Q21). */
+    .scope-editor { display: inline-block; }
+    .scopelink { cursor: pointer; font-size: 12.5px; color: var(--accent); font-weight: 600; }
+    .scope-editor summary::-webkit-details-marker { display: none; }
+    .scopeform { white-space: normal; min-width: 320px; padding: 4px 0 10px; }
+    .scoperow { display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
+                padding: 5px 0; border-bottom: 1px solid var(--line); }
+    .toolsbtn {
+      margin: 0; padding: 2px 8px; font-size: 11.5px; background: transparent;
+      color: var(--muted); border: 1px solid var(--line); border-radius: 6px;
+    }
+    .toolsbtn:hover { color: var(--text); filter: none; }
+    .toolbox { flex: 1 1 100%; padding: 4px 0 4px 24px; }
+    .toolbox label { display: flex; align-items: center; gap: 7px; margin: 3px 0;
+                     font-size: 12.5px; color: var(--text); }
+    .toolbox input { width: auto; margin: 0; }
+
+    /* An "entity card" — one connector, one service. Tables are for
+       scanning; these rows carry a rename box, a scope editor and two
+       buttons each, which is what made the page feel cramped. */
+    .entity {
+      border: 1px solid var(--line); border-radius: var(--radius);
+      padding: var(--s3) var(--s4); margin-bottom: var(--s3);
+      background: var(--panel-2);
+    }
+    .entity-head {
+      display: flex; align-items: flex-start; gap: var(--s3); flex-wrap: wrap;
+    }
+    .entity-title { flex: 1 1 260px; min-width: 0; }
+    .entity-title .name { font-size: 15.5px; font-weight: 600; }
+    .entity-title .sub2 { color: var(--muted); font-size: 12.5px; margin-top: 3px; }
+    .entity-facts {
+      display: flex; gap: var(--s4); flex-wrap: wrap; align-items: center;
+      color: var(--muted); font-size: 13px;
+    }
+    .entity-facts b { color: var(--text); font-weight: 600; }
+    .entity-actions {
+      display: flex; gap: var(--s1); align-items: center; flex-wrap: wrap;
+      margin-top: var(--s3); padding-top: var(--s3);
+      border-top: 1px solid var(--line);
+    }
+    .entity-actions form { margin: 0; }
+    .entity-actions button { margin: 0; padding: 6px 12px; font-size: 13px; }
+    .entity-actions input[type=text] { padding: 6px 10px; font-size: 13px; }
+
+    .qr { margin: 18px auto 8px; width: 220px; max-width: 100%; color: var(--text); line-height: 0; }
+    .qr svg { width: 100%; height: auto; }
+    details summary { cursor: pointer; font-size: 13px; margin-top: 10px; }
+    .empty { color: var(--muted); font-size: 14px; padding: 6px 0 2px; }
+
+    /* ---------- public directory (crawlable, no app shell) ---------- */
+    .public { max-width: 940px; margin: 0 auto; padding: 40px 20px 64px; }
+    .public-head { margin-bottom: 26px; }
+    .brand-lg { font-size: 17px; font-weight: 700; letter-spacing: .02em; margin-bottom: 22px; }
+    .brand-lg .glyph { color: var(--accent); }
+    .public-head h1 { font-size: 30px; margin: 0 0 10px; letter-spacing: -.01em; }
+    .public-head .lede { color: var(--muted); font-size: 16px; max-width: 62ch; margin: 0 0 6px; }
+    .crumb-link { font-size: 13px; margin: 0 0 14px; }
+    .crumb-link a { color: var(--muted); text-decoration: none; }
+    .grid {
+      display: grid; gap: 14px; margin-bottom: 22px;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    }
+    .tile {
+      display: block; text-decoration: none; color: inherit;
+      background: var(--panel); border: 1px solid var(--line);
+      border-radius: 11px; padding: 18px 20px;
+    }
+    .tile:hover { border-color: var(--accent); }
+    .tile-name { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 15px; }
+    .tile-summary { color: var(--muted); font-size: 14px; margin: 0 0 12px; }
+    .tile-more { color: var(--accent); font-size: 13.5px; font-weight: 600; }
+    .public-foot {
+      margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--line);
+      font-size: 13.5px; color: var(--muted);
+    }
+    .public-foot a { color: var(--muted); }
+
+    /* ---------- collapsed rail (webref's w-60 <-> w-14) ---------- */
+    .shell.railed { --sidebar: 62px; }
+    .shell.railed .brand span:not(.glyph),
+    .shell.railed .nav-label,
+    .shell.railed .nav a span:not(.ico),
+    .shell.railed .who,
+    .shell.railed .chev,
+    .shell.railed .count { display: none; }
+    .shell.railed .nav a { justify-content: center; padding: 9px 0; }
+    .shell.railed .brand { justify-content: center; padding: 18px 0 14px; }
+    .shell.railed .usermenu summary { justify-content: center; padding: 8px 0; }
+    .shell.railed .usermenu .menu { left: 8px; width: 230px; right: auto; }
+
+    .railtoggle {
+      border-top: 1px solid var(--line); padding: 8px 10px;
+      display: flex; justify-content: flex-end;
+    }
+    .railtoggle button {
+      margin: 0; padding: 4px 9px; font-size: 12px; background: transparent;
+      color: var(--muted); border: 1px solid var(--line); border-radius: 7px;
+    }
+    .railtoggle button:hover { color: var(--text); filter: none; }
+    .shell.railed .railtoggle { justify-content: center; }
+
+    /* collapsible sections (persisted, like acme's SidebarSection) */
+    .nav-label { display: flex; align-items: center; gap: 6px; cursor: pointer;
+                 user-select: none; background: none; border: 0; width: 100%;
+                 font: inherit; font-size: 11px; font-weight: 600;
+                 letter-spacing: .08em; text-transform: uppercase;
+                 color: var(--muted); text-align: left; }
+    .nav-label:hover { color: var(--text); }
+    .nav-label .caret { font-size: 9px; transition: transform .15s; }
+    .nav-section.closed .caret { transform: rotate(-90deg); }
+    .nav-section.closed .nav-items { display: none; }
+
+    /* theme toggle */
+    .themepick { display: flex; gap: 4px; margin-top: 8px; }
+    .themepick button {
+      flex: 1; margin: 0; padding: 5px 6px; font-size: 11.5px; font-weight: 600;
+      background: transparent; color: var(--muted);
+      border: 1px solid var(--line); border-radius: 6px;
+    }
+    .themepick button[aria-pressed="true"] {
+      color: var(--text); border-color: var(--accent); background: var(--accent-soft);
+    }
+
+    /* badge on a user-menu item (zsupport's #review-badge) */
+    .menu-badge {
+      float: right; font-size: 11px; color: var(--accent);
+      background: var(--accent-soft); border-radius: 999px; padding: 0 6px;
+    }
+
+    /* ---------- narrow screens: a real drawer, not a wrapped strip ------- */
+    .drawertoggle { display: none; }
+    @media (max-width: 820px) {
+      .shell { flex-direction: column; }
+      .drawertoggle {
+        display: flex; align-items: center; gap: 10px;
+        padding: 12px 16px; border-bottom: 1px solid var(--line);
+        background: var(--panel); position: sticky; top: 0; z-index: 40;
+      }
+      .drawertoggle button {
+        margin: 0; padding: 5px 11px; font-size: 16px; line-height: 1;
+        background: transparent; color: var(--text);
+        border: 1px solid var(--line); border-radius: 7px;
+      }
+      .drawertoggle .mark { color: var(--accent); font-weight: 700; }
+      .sidebar {
+        position: fixed; top: 0; left: 0; bottom: 0; z-index: 50;
+        width: 280px; flex: none; height: 100vh;
+        transform: translateX(-100%); transition: transform .18s ease;
+        box-shadow: 0 0 40px rgba(0,0,0,.35);
+      }
+      .shell.drawer-open .sidebar { transform: translateX(0); }
+      .shell.drawer-open::after {
+        content: ''; position: fixed; inset: 0; z-index: 45;
+        background: rgba(0,0,0,.45);
+      }
+      .shell.railed { --sidebar: 280px; }     /* rail is meaningless in a drawer */
+      .shell.railed .brand span:not(.glyph),
+      .shell.railed .nav-label,
+      .shell.railed .nav a span:not(.ico),
+      .shell.railed .who,
+      .shell.railed .count { display: revert; }
+      .railtoggle { display: none; }
+      .topbar, .page { padding-left: 16px; padding-right: 16px; }
+    }
+  </style>
+</head>
+<body>
+{% if show_nav %}
+<div class="shell" id="shell">
+  <div class="drawertoggle">
+    <button type="button" id="drawer-open" aria-label="Menu">☰</button>
+    <span class="mark">⛩ torii</span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="glyph">⛩</span>
+      <span>torii<small>mcp gateway</small></span>
+    </div>
+
+    <nav class="nav">
+      <div class="nav-section" data-section="my-access">
+        <button type="button" class="nav-label" data-toggle-section>
+          <span class="caret">▼</span> My access</button>
+        <div class="nav-items">
+        <a href="/ui" class="{{ 'active' if nav_active == 'overview' }}">
+          <span class="ico">◍</span> Overview</a>
+        <a href="/ui/grants" class="{{ 'active' if nav_active == 'my-grants' }}">
+          <span class="ico">⊞</span> My tools
+          {% if nav_counts and nav_counts.my_grants is not none %}<span class="count">{{ nav_counts.my_grants }}</span>{% endif %}</a>
+        <a href="/ui/keys" class="{{ 'active' if nav_active == 'keys' }}">
+          <span class="ico">⚿</span> API keys
+          {% if nav_counts and nav_counts.my_keys is not none %}<span class="count">{{ nav_counts.my_keys }}</span>{% endif %}</a>
+        <a href="/ui/services" class="{{ 'active' if nav_active == 'services' }}">
+          <span class="ico">⚙</span> Services
+          {% if nav_counts and nav_counts.my_services %}<span class="count">{{ nav_counts.my_services }}</span>{% endif %}</a>
+        <a href="/ui/connectors" class="{{ 'active' if nav_active == 'connectors' }}">
+          <span class="ico">⇄</span> Connectors
+          {% if nav_counts and nav_counts.my_clients is not none %}<span class="count">{{ nav_counts.my_clients }}</span>{% endif %}</a>
+        </div>
+      </div>
+
+      {% if session and session.is_admin %}
+      <div class="nav-section" data-section="administration">
+        <button type="button" class="nav-label" data-toggle-section>
+          <span class="caret">▼</span> Administration</button>
+        <div class="nav-items">
+        <a href="/ui/admin/principals" class="{{ 'active' if nav_active == 'principals' }}">
+          <span class="ico">☺</span> Principals
+          {% if nav_counts and nav_counts.principals is not none %}<span class="count">{{ nav_counts.principals }}</span>{% endif %}</a>
+        <a href="/ui/admin/upstreams" class="{{ 'active' if nav_active == 'upstreams' }}">
+          <span class="ico">▤</span> Upstreams
+          {% if nav_counts and nav_counts.upstreams is not none %}<span class="count">{{ nav_counts.upstreams }}</span>{% endif %}</a>
+        <a href="/ui/admin/groups" class="{{ 'active' if nav_active == 'groups' }}">
+          <span class="ico">⚏</span> Groups
+          {% if nav_counts and nav_counts.groups is not none %}<span class="count">{{ nav_counts.groups }}</span>{% endif %}</a>
+        <a href="/ui/admin/grants" class="{{ 'active' if nav_active == 'grants' }}">
+          <span class="ico">✓</span> Grants
+          {% if nav_counts and nav_counts.grants is not none %}<span class="count">{{ nav_counts.grants }}</span>{% endif %}</a>
+        <a href="/ui/admin/clients" class="{{ 'active' if nav_active == 'clients' }}">
+          <span class="ico">⌗</span> OAuth clients</a>
+        <a href="/ui/admin/audit" class="{{ 'active' if nav_active == 'audit' }}">
+          <span class="ico">◷</span> Audit log</a>
+        <a href="/ui/admin/config" class="{{ 'active' if nav_active == 'config' }}">
+          <span class="ico">⇩</span> Config export</a>
+        </div>
+      </div>
+      {% endif %}
+    </nav>
+
+    <div class="railtoggle">
+      <button type="button" id="rail-toggle" title="Collapse the sidebar"
+              aria-label="Collapse the sidebar">«</button>
+    </div>
+
+    <!-- Account menu: bottom-left, pops up, grouped items — the zsupport
+         pattern, which is the house convention for this. -->
+    <div class="usermenu">
+      <details>
+        <summary>
+          <span class="avatar">{{ (session.username or '?')[:1]|upper }}</span>
+          <span class="who">
+            <span class="name">{{ session.username }}</span>
+            <span class="role">{{ 'administrator' if session.is_admin else 'user' }}</span>
+          </span>
+          <span class="chev">^</span>
+        </summary>
+        <div class="menu" role="menu">
+          <div class="menu-head">{{ session.username }}{% if session.is_admin %} · admin{% endif %}</div>
+          {% if session and session.is_admin %}
+          <div class="menu-section">
+            <div class="menu-label">System</div>
+            <a href="/ui/admin/principals">People &amp; services</a>
+            <a href="/ui/admin/audit">Audit log</a>
+            <a href="/ui/admin/upstreams">Servers
+              {% if nav_counts and nav_counts.upstreams %}<span class="menu-badge">{{ nav_counts.upstreams }}</span>{% endif %}</a>
+          </div>
+          {% endif %}
+          <div class="menu-section">
+            <div class="menu-label">Account</div>
+            <a href="/ui/account">Password &amp; two-factor</a>
+            <a href="/ui/keys">My API keys</a>
+            <a href="/ui/services">My services</a>
+          </div>
+          <div class="menu-section">
+            <div class="menu-label">Appearance</div>
+            <div class="themepick" id="themepick">
+              <button type="button" data-theme-choice="light">Light</button>
+              <button type="button" data-theme-choice="dark">Dark</button>
+              <button type="button" data-theme-choice="system">System</button>
+            </div>
+          </div>
+          <div class="menu-section">
+            <div class="menu-label">Session</div>
+            <a href="/ui/logout" class="danger">Sign out</a>
+          </div>
+        </div>
+      </details>
+    </div>
+  </aside>
+
+  <main class="content">
+    <div class="topbar">
+      <h1>{% block heading %}{% endblock %}</h1>
+      <span class="crumb">{% block crumb %}{% endblock %}</span>
+    </div>
+    <div class="page">
+      {% if notice %}<div class="notice">{{ notice }}</div>{% endif %}
+      {% block content %}{% endblock %}
+    </div>
+  </main>
+</div>
+{% else %}
+<main class="page">{% block bare_content %}{% endblock %}</main>
+{% endif %}
+<script>
+// Copy-to-clipboard for endpoint URLs. Delegated, so markup added later needs
+// no wiring. navigator.clipboard needs a secure context, which the tunnel
+// provides but plain-HTTP LAN access does not — hence the textarea fallback,
+// which still works over http://127.0.0.1:8400.
+document.addEventListener('click', function (event) {
+  var button = event.target.closest('[data-copy]');
+  if (!button) return;
+  event.preventDefault();
+  var text = button.getAttribute('data-copy');
+  var done = function () {
+    var original = button.textContent;
+    button.textContent = 'copied';
+    button.classList.add('copied');
+    setTimeout(function () {
+      button.textContent = original;
+      button.classList.remove('copied');
+    }, 1200);
+  };
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(done, function () { fallback(text, done); });
+  } else {
+    fallback(text, done);
+  }
+  function fallback(value, onDone) {
+    var area = document.createElement('textarea');
+    area.value = value;
+    area.setAttribute('readonly', '');
+    area.style.position = 'fixed';
+    area.style.opacity = '0';
+    document.body.appendChild(area);
+    area.select();
+    try { document.execCommand('copy'); onDone(); } catch (e) { /* leave it selected */ }
+    document.body.removeChild(area);
+  }
+});
+
+// ---- per-connector tool picker (Q21) -------------------------------------
+// Loads a server's tools on demand, filtered to what the CALLER can delegate.
+document.addEventListener('click', async function (event) {
+  var button = event.target.closest('[data-load-tools]');
+  if (!button) return;
+  event.preventDefault();
+  var row = button.closest('.scoperow');
+  var box = row.querySelector('.toolbox');
+  var server = button.getAttribute('data-load-tools');
+  if (!box.hidden) { box.hidden = true; return; }
+
+  button.textContent = 'loading…';
+  try {
+    var response = await fetch('/ui/tools.json?server=' + encodeURIComponent(server));
+    var data = await response.json();
+    button.textContent = 'pick tools…';
+    if (!response.ok) {
+      box.textContent = data.error || 'could not reach that server';
+      box.hidden = false;
+      return;
+    }
+    box.innerHTML = '';
+    // Ticking any tool implies the server itself is in scope.
+    var serverBox = row.querySelector('input[name="scope_to"]');
+    data.tools.forEach(function (tool) {
+      var label = document.createElement('label');
+      var cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.name = 'tools:' + server;
+      cb.value = tool.name;
+      cb.addEventListener('change', function () { if (cb.checked) serverBox.checked = true; });
+      var name = document.createElement('code');
+      name.textContent = tool.name;
+      label.append(cb, name);
+      if (tool.description) {
+        var d = document.createElement('span');
+        d.className = 'muted';
+        d.style.fontSize = '12px';
+        d.textContent = tool.description.slice(0, 70);
+        label.append(d);
+      }
+      box.append(label);
+    });
+    if (!data.tools.length) box.textContent = 'no tools you can delegate';
+    box.hidden = false;
+  } catch (e) {
+    button.textContent = 'pick tools…';
+    box.textContent = 'could not reach that server';
+    box.hidden = false;
+  }
+});
+
+// ---- sidebar sections, rail, drawer, theme (PRD Q20) ----------------------
+// Vanilla and inline on purpose: torii has no bundler and a no-external-assets
+// posture, so a few lines here beat a dependency.
+(function () {
+  var shell = document.getElementById('shell');
+  if (!shell) return;
+
+  function remember(key, value) {
+    try { localStorage.setItem('torii:' + key, value); } catch (e) { /* blocked */ }
+  }
+  function recall(key) {
+    try { return localStorage.getItem('torii:' + key); } catch (e) { return null; }
+  }
+
+  // Collapsible sections. Ids are stable strings in the markup — renaming one
+  // silently loses that user's saved state, which is the same warning
+  // webref's SidebarSection carries.
+  document.querySelectorAll('.nav-section[data-section]').forEach(function (section) {
+    var id = section.getAttribute('data-section');
+    if (recall('section:' + id) === '0') section.classList.add('closed');
+    var button = section.querySelector('[data-toggle-section]');
+    if (!button) return;
+    button.addEventListener('click', function () {
+      var closed = section.classList.toggle('closed');
+      remember('section:' + id, closed ? '0' : '1');
+    });
+  });
+
+  // Collapse to an icon rail.
+  var rail = document.getElementById('rail-toggle');
+  if (recall('rail') === '1') shell.classList.add('railed');
+  if (rail) {
+    rail.textContent = shell.classList.contains('railed') ? '»' : '«';
+    rail.addEventListener('click', function () {
+      var railed = shell.classList.toggle('railed');
+      rail.textContent = railed ? '»' : '«';
+      remember('rail', railed ? '1' : '0');
+    });
+  }
+
+  // Drawer on narrow screens: opened by the ☰, closed by the scrim, a nav
+  // click, or Escape — all three, because any one alone feels broken.
+  var open = document.getElementById('drawer-open');
+  function closeDrawer() { shell.classList.remove('drawer-open'); }
+  if (open) {
+    open.addEventListener('click', function (event) {
+      event.stopPropagation();
+      shell.classList.toggle('drawer-open');
+    });
+    shell.addEventListener('click', function (event) {
+      if (!shell.classList.contains('drawer-open')) return;
+      if (event.target.closest('.sidebar a')) { closeDrawer(); return; }
+      if (!event.target.closest('.sidebar')) closeDrawer();
+    });
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') closeDrawer();
+    });
+  }
+
+  // Theme. 'system' clears the attribute and lets the OS decide again.
+  var picker = document.getElementById('themepick');
+  function paintPicker() {
+    var current = recall('theme') || 'system';
+    picker.querySelectorAll('[data-theme-choice]').forEach(function (button) {
+      button.setAttribute(
+        'aria-pressed', button.getAttribute('data-theme-choice') === current ? 'true' : 'false'
+      );
+    });
+  }
+  if (picker) {
+    paintPicker();
+    picker.addEventListener('click', function (event) {
+      var button = event.target.closest('[data-theme-choice]');
+      if (!button) return;
+      var choice = button.getAttribute('data-theme-choice');
+      if (choice === 'system') {
+        document.documentElement.removeAttribute('data-theme');
+      } else {
+        document.documentElement.setAttribute('data-theme', choice);
+      }
+      remember('theme', choice);
+      paintPicker();
+    });
+  }
+})();
+</script>
+{% block page_script %}{% endblock %}
+</body>
+</html>

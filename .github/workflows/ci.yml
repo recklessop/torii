@@ -1,0 +1,68 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: torii
+          POSTGRES_PASSWORD: torii
+          POSTGRES_DB: torii
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U torii"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      valkey:
+        image: valkey/valkey:8-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "valkey-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://torii:torii@localhost:5432/torii
+      TORII_TEST_DATABASE_URL: postgresql://torii:torii@localhost:5432/torii
+      VALKEY_URL: redis://localhost:6379/0
+      PUBLIC_BASE_URL: https://torii.test
+      TORII_REQUIRE_TEST_DB: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+      - name: Run tests
+        run: pytest -q
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install audit tools
+        run: pip install bandit pip-audit
+      - name: bandit
+        run: bandit -c bandit.yaml -r torii
+      - name: pip-audit
+        run: pip-audit -r requirements.txt || true
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Authorization error — torii{% endblock %}
+{% block bare_content %}
+<div class="card narrow">
+  <h1>Authorization can't continue</h1>
+  <p class="sub">{{ error }}</p>
+  {% if description %}<div class="error">{{ description }}</div>{% endif %}
+  <p class="muted">
+    Nothing was granted. If a connector sent you here, its registration may be
+    stale — remove and re-add it, and it will register again.
+  </p>
+</div>
+{% endblock %}

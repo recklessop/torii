@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}MCP directory — torii{% endblock %}
+{% block extra_head %}
+<meta name="description" content="Model Context Protocol servers published through the torii gateway, and the tools each one offers.">
+<script type="application/ld+json">{{ json_ld|safe }}</script>
+{% endblock %}
+{% block bare_content %}
+<div class="public">
+  <header class="public-head">
+    <div class="brand-lg"><span class="glyph">⛩</span> torii</div>
+    <h1>MCP directory</h1>
+    <p class="lede">
+      Model Context Protocol servers published through this gateway. One
+      endpoint, one sign-in, and each client sees exactly the tools it's been
+      granted.
+    </p>
+  </header>
+
+  {% if servers %}
+  <div class="grid">
+    {% for server in servers %}
+    <a class="tile" href="/directory/{{ server.name }}">
+      <div class="tile-name">
+        <strong>{{ server.title }}</strong>
+        {% if not server.available %}<span class="pill">offline</span>{% endif %}
+      </div>
+      <div class="muted" style="font-size:12px;margin-bottom:8px"><code>/{{ server.name }}/mcp</code></div>
+      <p class="tile-summary">{{ server.summary or 'No description yet.' }}</p>
+      <span class="tile-more">View tools →</span>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="card">
+    <p class="empty">No servers are published yet.</p>
+  </div>
+  {% endif %}
+
+  <section class="card">
+    <h2>How to connect</h2>
+    <p class="sub">
+      torii speaks streamable HTTP MCP and acts as its own OAuth 2.1
+      authorization server, so a Claude client can register itself — no
+      client id to copy by hand.
+    </p>
+    <div class="overflow"><table>
+      <tbody>
+        <tr><th style="width:190px">One server</th>
+            <td><code>{{ base_url }}/&lt;server&gt;/mcp</code>
+            <div class="muted" style="font-size:12.5px">that server's tools, unprefixed — each server's page shows its exact URL</div></td></tr>
+        <tr><th>Everything you're granted</th>
+            <td><code>{{ base_url }}/mcp</code>
+            <div class="muted" style="font-size:12.5px">tools prefixed <code>server__tool</code></div></td></tr>
+        <tr><th>Transport</th><td>streamable HTTP</td></tr>
+        <tr><th>Authorization</th><td>OAuth 2.1 + PKCE, dynamic client registration (RFC 7591)</td></tr>
+        <tr><th>Metadata</th><td><code>{{ base_url }}/.well-known/oauth-authorization-server</code></td></tr>
+        <tr><th>Machine-readable</th><td><a href="/directory.json"><code>{{ base_url }}/directory.json</code></a></td></tr>
+      </tbody>
+    </table></div>
+    <p class="muted" style="margin-top:14px">
+      Being listed here describes a server — it doesn't grant access to it.
+      Every tool call is checked against an explicit grant, and a client with
+      no grants sees an empty tool list.
+    </p>
+  </section>
+
+  <footer class="public-foot">
+    <a href="/ui">Sign in</a>
+  </footer>
+</div>
+{% endblock %}

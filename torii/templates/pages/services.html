@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}Service identities — torii{% endblock %}
+{% block heading %}Service identities{% endblock %}
+{% block crumb %}for your scripts and jobs{% endblock %}
+{% block content %}
+
+{% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+{% if minted %}
+<div class="card">
+  <h2>Its key</h2>
+  <div class="secret">{{ minted }}</div>
+  <p class="muted">Shown once. Put it in the job's environment now.</p>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>What these are for</h2>
+  <p class="sub">
+    A service identity is for something that isn't you — a cron job, a script,
+    another product. It gets its own name in the audit log, so a year from now
+    you can tell machine traffic from your own, and its own key you can rotate
+    without touching your sign-in.
+  </p>
+  <p class="muted" style="font-size:13px">
+    It can never reach anything you can't, and it stops working if your account
+    is disabled. If you need something that outlives your account — production,
+    say — an admin can promote it to an independent service.
+  </p>
+  <p class="muted" style="font-size:13px">
+    If it's really just <em>you</em> running something by hand — Claude Code, a
+    bit of <code>curl</code> — an <a href="/ui/keys">API key</a> is simpler and
+    the audit correctly says it was you. Reach for a service identity when you
+    want the log to name the <em>thing</em>, or when you'll want to revoke it
+    without touching your own access.
+  </p>
+</div>
+
+<div class="card">
+  <h2>New service identity</h2>
+  {% if my_servers %}
+  <form method="post" action="/ui/services">
+    <label for="name">What is it?</label>
+    <input id="name" name="name" type="text" placeholder="inventory-bot, nightly-report" required>
+
+    <label>What may it reach?</label>
+    <div class="row" style="gap:8px">
+      {% for server in my_servers %}
+      <label style="flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;margin:4px 10px 4px 0;color:var(--text)">
+        <input type="checkbox" name="reaches" value="{{ server.name }}" style="width:auto">
+        <code>{{ server.name }}</code>
+      </label>
+      {% endfor %}
+    </div>
+    <p class="muted" style="font-size:12.5px">
+      Only servers you can reach are listed — a service can't be granted more
+      than its owner. Tick nothing and it starts with no access, which you can
+      fix later by asking an admin. It can hold several keys, so the same
+      service running in two places gets one each.
+    </p>
+
+    <button type="submit">Create and issue a key</button>
+  </form>
+  {% else %}
+  <p class="empty">
+    You have no grants yet, so a service identity would have nothing to reach.
+    Ask an admin for access first.
+  </p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Mine</h2>
+  {% if services %}
+    {% for s in services %}
+    <div class="entity">
+      <div class="entity-head">
+        <div class="entity-title">
+          <div class="name"><code>{{ s.username }}</code></div>
+          <div class="sub2">
+            {% if s.reaches %}reaches {{ s.reaches|join(', ') }}
+            {% else %}reaches nothing yet{% endif %}
+            {% if s.disabled_at %} · <span class="pill off">disabled</span>{% endif %}
+          </div>
+        </div>
+        <div class="entity-facts">
+          <span><b>{{ s.live_keys|length }}</b> live key{{ '' if s.live_keys|length == 1 else 's' }}</span>
+        </div>
+      </div>
+
+      {% if s.live_keys %}
+      <div style="margin-top:var(--s3)">
+        {% for k in s.live_keys %}
+        <div style="display:flex;align-items:center;gap:var(--s3);padding:6px 0;flex-wrap:wrap">
+          <span style="min-width:150px"><b>{{ k.name }}</b>
+            <code class="muted" style="font-size:12px">{{ k.key_prefix }}…</code></span>
+          <span class="muted" style="font-size:12.5px;flex:1">
+            {% if k.last_used_at %}last used {{ k.last_used_at.strftime('%b %d %H:%M') }}
+            {% else %}never used{% endif %}
+          </span>
+          <form method="post" action="/ui/services/{{ s.id }}/key/{{ k.id }}/revoke"
+                onsubmit="return confirm('Revoke just this key? The service keeps working through its others.')">
+            <button class="danger" type="submit"
+                    style="margin:0;padding:4px 10px;font-size:12px">revoke</button>
+          </form>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <div class="entity-actions">
+        <form method="post" action="/ui/services/{{ s.id }}/key" style="display:flex;gap:6px">
+          <input name="name" type="text" placeholder="add a key: pi, staging…" style="width:170px">
+          <button class="secondary" type="submit">add key</button>
+        </form>
+        <form method="post" action="/ui/services/{{ s.id }}/key"
+              onsubmit="return confirm('Replace every key for this service? All current ones stop working.')">
+          <input type="hidden" name="replace" value="1">
+          <input type="hidden" name="name" value="default">
+          <button class="secondary" type="submit">replace all</button>
+        </form>
+        <form method="post" action="/ui/services/{{ s.id }}/delete" style="margin-left:auto"
+              onsubmit="return confirm('Delete this service identity and its keys?')">
+          <button class="danger" type="submit">delete</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+  <p class="empty">None yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}API keys — torii{% endblock %}
+{% block heading %}API keys{% endblock %}
+{% block crumb %}for clients that don't do OAuth{% endblock %}
+{% block content %}
+
+{% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+{% if minted %}
+<div class="card">
+  <h2>Your new key</h2>
+  <div class="secret">{{ minted }}</div>
+  <p class="muted">This is the only time it's shown. Store it now.</p>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Create a key</h2>
+  <p class="sub">
+    A key here is <strong>you</strong>: Claude Code on your laptop, the API's
+    <code>mcp_servers</code> block, a bit of <code>curl</code> while you're
+    working something out. The audit log will say your name, because it was
+    you.
+  </p>
+  <p class="muted" style="font-size:13px">
+    Running something that <em>isn't</em> you — a cron job, a bot, an
+    integration? Give it a <a href="/ui/services">service identity</a> instead.
+    Then the audit names the thing rather than you, you can revoke it without
+    touching your own access, and an admin can promote it to outlive your
+    account. Rule of thumb: would you rather read <code>{{ session.username }}</code>
+    or <code>nightly-report</code> in the log a year from now?
+  </p>
+  <form method="post" action="/ui/keys">
+    <label for="name">What's it for?</label>
+    <input id="name" name="name" type="text" placeholder="e.g. laptop, claude-code" required>
+
+    {% if my_servers %}
+    <label>Limit it to particular servers (optional)</label>
+    <div class="row" style="gap:8px">
+      {% for server in my_servers %}
+      <label style="flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;margin:4px 10px 4px 0;color:var(--text)">
+        <input type="checkbox" name="scope_to" value="{{ server.name }}" style="width:auto">
+        <code>{{ server.name }}</code>
+      </label>
+      {% endfor %}
+    </div>
+    <p class="muted" style="font-size:12.5px">
+      Tick nothing and the key inherits everything you can reach. Tick one or
+      more and the key is limited to those, whatever URL it's pointed at —
+      handing someone <code>/&lt;server&gt;/mcp</code> is not a limit, since
+      the same key also works on <code>/mcp</code>.
+    </p>
+    {% endif %}
+
+    <button type="submit">Create key</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Active keys</h2>
+  {% if keys %}
+  <div class="overflow"><table>
+    <thead><tr><th>Name</th><th>Key</th><th>Reaches</th><th>Calls/min</th><th>Last used</th><th></th></tr></thead>
+    <tbody>
+      {% for k in keys %}
+      <tr>
+        <td>{{ k.name }}</td>
+        <td><code>{{ k.key_prefix }}…</code></td>
+        <td>
+          {% if k.access_mode == 'narrowed' %}
+            {% if k.scoped_to %}
+              {% for server in k.scoped_to %}<span class="pill">{{ server }}</span> {% endfor %}
+            {% else %}<span class="pill off">nothing</span>{% endif %}
+          {% else %}<span class="pill ok">everything I can</span>{% endif %}
+        </td>
+        <td>
+          <form method="post" action="/ui/keys/{{ k.id }}/rate_limit" style="display:flex;gap:5px">
+            <input name="rate_limit_per_min" type="number" min="1" value="{{ k.rate_limit_per_min or '' }}"
+                   placeholder="default" style="width:80px;padding:3px 7px;font-size:12px">
+            <button class="secondary" type="submit"
+                    style="margin:0;padding:3px 8px;font-size:11.5px">set</button>
+          </form>
+        </td>
+        <td class="muted">{% if k.last_used_at %}{{ k.last_used_at.strftime('%Y-%m-%d %H:%M') }}{% else %}never{% endif %}</td>
+        <td style="white-space:nowrap">
+          <form class="inline" method="post" action="/ui/keys/{{ k.id }}/rotate">
+            <button class="secondary" type="submit">rotate</button>
+          </form>
+          <form class="inline" method="post" action="/ui/keys/{{ k.id }}/revoke"
+                onsubmit="return confirm('Revoke this key? Anything using it stops working immediately.')">
+            <button class="danger" type="submit">revoke</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}
+  <p class="empty">No keys yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

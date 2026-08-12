@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% block title %}Grants — torii{% endblock %}
+{% block heading %}Grants{% endblock %}
+{% block crumb %}default deny — access exists only as a row here{% endblock %}
+{% block content %}
+
+<div class="card">
+  <h2>Give someone access</h2>
+
+  <form method="post" action="/ui/admin/grants" id="grant-form">
+    <div class="row">
+      <div>
+        <label for="who">Who gets it?</label>
+        <select id="who" name="who" required>
+          <option value="">choose…</option>
+          {% if principals %}
+          <optgroup label="People and services">
+            {% for p in principals %}
+            <option value="principal:{{ p.username }}">{{ p.username }}{% if p.kind == 'service' %} (service){% endif %}</option>
+            {% endfor %}
+          </optgroup>
+          {% endif %}
+          {% if all_clients %}
+          <optgroup label="Connectors — limits one Claude client">
+            {% for c in all_clients %}
+            <option value="client:{{ c.client_id }}">{{ c.display }}</option>
+            {% endfor %}
+          </optgroup>
+          {% endif %}
+          {% if known_groups %}
+          <optgroup label="Groups — everyone in it">
+            {% for g in known_groups %}
+            <option value="group:{{ g.name }}">{{ g.name }} ({{ g.member_count }} member{{ '' if g.member_count == 1 else 's' }})</option>
+            {% endfor %}
+          </optgroup>
+          {% endif %}
+          {% if all_keys %}
+          <optgroup label="API keys — limits one key">
+            {% for k in all_keys %}
+            <option value="key:{{ k.id }}">{% if k.owner %}{{ k.owner }} · {% endif %}{{ k.name }} ({{ k.key_prefix }}…)</option>
+            {% endfor %}
+          </optgroup>
+          {% endif %}
+        </select>
+        <p class="muted" style="font-size:12.5px;margin:6px 0 0">
+          A <strong>person</strong> or a <strong>group</strong> gets baseline
+          access. A <strong>connector</strong> or <strong>key</strong> instead
+          <em>limits</em> that one credential to what you tick here — it can
+          never exceed what its owner already has.
+        </p>
+      </div>
+
+      <div>
+        <label for="upstream_name">Which server?</label>
+        <select id="upstream_name" name="upstream_name" required>
+          <option value="">choose…</option>
+          {% for u in upstreams %}
+          <option value="{{ u.name }}" data-upstream-id="{{ u.id }}">
+            {{ u.display_name or u.name }}{% if not u.enabled %} (disabled){% endif %}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <h3>Which tools?</h3>
+    <div class="row" style="gap:18px">
+      <label style="flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;color:var(--text);margin:0">
+        <input type="radio" name="tool_scope" value="all" checked style="width:auto"> Every tool on it
+      </label>
+      <label style="flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;color:var(--text);margin:0">
+        <input type="radio" name="tool_scope" value="list" style="width:auto"> Only the ones I tick
+      </label>
+      <span style="flex:0 0 auto">
+        <button type="button" class="secondary" id="discover" style="margin:0">
+          Load this server's tools
+        </button>
+      </span>
+      <span class="muted" id="discover-msg" style="flex:1 1 200px;font-size:13px"></span>
+    </div>
+
+    <div class="toolpick" id="toolpick" hidden></div>
+
+    <button type="submit">Create grant</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Existing grants</h2>
+  {% if grants %}
+  <div class="overflow"><table>
+    <thead><tr><th>Who</th><th>Kind</th><th>Server</th><th>Tools</th><th></th></tr></thead>
+    <tbody>
+      {% for g in grants %}
+      <tr>
+        <td>{% if g.subject_owner %}{{ g.subject_owner }} · {% endif %}
+          {%- if g.group_id %}<a href="/ui/admin/groups/{{ g.group_id }}">{{ g.subject_name }}</a>
+          {%- else %}{{ g.subject_name }}{% endif %}</td>
+        <td>
+          {% if g.subject_type == 'principal' %}<span class="pill">person</span>
+          {% elif g.subject_type == 'client' %}<span class="pill">connector limit</span>
+          {% elif g.subject_type == 'key' %}<span class="pill">key limit</span>
+          {% else %}<span class="pill">group</span>{% endif %}
+        </td>
+        <td><code>{{ g.upstream_name }}</code></td>
+        <td class="tools">
+          {% if g.tool_scope == 'all' %}<span class="pill ok">all tools</span>
+          {% else %}{{ g.tools|join(', ') }}{% endif %}
+        </td>
+        <td>
+          <form class="inline" method="post" action="/ui/admin/grants/{{ g.id }}/delete"
+                onsubmit="return confirm('Remove this grant?')">
+            <button class="danger" type="submit">remove</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}
+  <p class="empty">No grants yet — nobody can reach anything.</p>
+  {% endif %}
+</div>
+
+<script>
+// Ask the server what tools it has, rather than making an operator remember
+// them six months later. Same idea as zsupport's "discover tools".
+(function () {
+  var select = document.getElementById('upstream_name');
+  var button = document.getElementById('discover');
+  var box = document.getElementById('toolpick');
+  var msg = document.getElementById('discover-msg');
+  if (!select || !button) return;
+
+  function scopeToList() {
+    var list = document.querySelector('input[name="tool_scope"][value="list"]');
+    if (list) list.checked = true;
+  }
+
+  async function discover() {
+    var option = select.options[select.selectedIndex];
+    var id = option && option.getAttribute('data-upstream-id');
+    if (!id) { msg.textContent = 'Pick a server first.'; return; }
+    msg.textContent = 'Asking the server…';
+    box.hidden = true;
+    box.innerHTML = '';
+    try {
+      var response = await fetch('/ui/admin/upstreams/' + id + '/tools.json');
+      var data = await response.json();
+      if (!response.ok) {
+        msg.textContent = 'Could not reach it: ' + (data.error || response.status);
+        return;
+      }
+      if (!data.tools.length) { msg.textContent = 'It reports no tools.'; return; }
+      data.tools.forEach(function (tool) {
+        var label = document.createElement('label');
+        label.className = 'toolrow';
+        var cb = document.createElement('input');
+        cb.type = 'checkbox'; cb.name = 'tools'; cb.value = tool.name;
+        cb.addEventListener('change', scopeToList);
+        var name = document.createElement('span');
+        name.className = 'toolname'; name.textContent = tool.name;
+        label.append(cb, name);
+        if (tool.read_only === true) {
+          var ro = document.createElement('span');
+          ro.className = 'pill ok'; ro.textContent = 'read-only';
+          label.append(ro);
+        } else if (tool.read_only === false || tool.destructive === true) {
+          var rw = document.createElement('span');
+          rw.className = 'pill off'; rw.textContent = 'may modify data';
+          label.append(rw);
+        }
+        if (tool.description) {
+          var d = document.createElement('span');
+          d.className = 'tooldesc'; d.textContent = tool.description;
+          label.append(d);
+        }
+        box.append(label);
+      });
+      box.hidden = false;
+      msg.textContent = data.tools.length + ' tools on ' + data.server +
+                        ' — tick the ones to allow.';
+    } catch (e) {
+      msg.textContent = 'Could not reach it: ' + e;
+    }
+  }
+
+  button.addEventListener('click', discover);
+  select.addEventListener('change', function () {
+    box.hidden = true; box.innerHTML = ''; msg.textContent = '';
+  });
+})();
+</script>
+{% endblock %}

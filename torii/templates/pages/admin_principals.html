@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Principals — torii{% endblock %}
+{% block heading %}Principals{% endblock %}
+{% block crumb %}humans and services that can authenticate{% endblock %}
+{% block content %}
+
+{% if minted %}
+<div class="card">
+  <h2>New credential</h2>
+  <div class="secret">{{ minted }}</div>
+  <p class="muted">Copy this now — torii won't show it again.</p>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Add a principal</h2>
+  <form method="post" action="/ui/admin/principals">
+    <div class="row">
+      <div><label for="username">Username</label>
+        <input id="username" name="username" type="text" required></div>
+      <div><label for="kind">Kind</label>
+        <select id="kind" name="kind">
+          <option value="human">human — signs in</option>
+          <option value="service">service — static keys only</option>
+        </select></div>
+      <div><label for="is_admin">Administrator</label>
+        <select id="is_admin" name="is_admin"><option value="">no</option><option value="1">yes</option></select></div>
+      <div><label for="totp_required">Require authenticator</label>
+        <select id="totp_required" name="totp_required">
+          <option value="">no</option><option value="1">yes</option>
+        </select></div>
+      <div class="narrow-field"><button type="submit">Create</button></div>
+    </div>
+    <p class="muted" style="font-size:12.5px;margin-top:10px">
+      Humans get a temp password and must change it on first sign-in.
+      Administrators always require an authenticator.
+    </p>
+  </form>
+</div>
+
+<div class="card">
+  <h2>All principals</h2>
+  <div class="overflow"><table>
+    <thead><tr><th>Username</th><th>Kind</th><th>State</th><th>2FA</th><th>Grants</th><th></th></tr></thead>
+    <tbody>
+      {% for p in principals %}
+      <tr>
+        <td>{{ p.username }}{% if p.is_admin %} <span class="pill">admin</span>{% endif %}</td>
+        <td class="muted">{{ p.kind }}
+          {% if p.owner %}<div style="font-size:11.5px">delegated by {{ p.owner }}</div>
+          {% elif p.kind == 'service' %}<div style="font-size:11.5px">independent</div>{% endif %}
+        </td>
+        <td>
+          {% if p.disabled_at %}<span class="pill off">disabled</span>
+          {% else %}<span class="pill ok">active</span>{% endif %}
+        </td>
+        <td>
+          {% if p.kind != 'human' %}<span class="muted">—</span>
+          {% elif p.needs_totp %}<span class="pill">pending</span>
+          {% elif p.totp_required %}<span class="pill ok">required</span>
+          {% else %}<span class="muted">off</span>{% endif %}
+        </td>
+        <td class="muted">{{ p.grant_count }}</td>
+        <td><a class="button secondary" href="/ui/admin/principals/{{ p.id }}">manage</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+</div>
+{% endblock %}

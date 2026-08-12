@@ -1,0 +1,5 @@
+# SQL migrations, applied in filename order on boot (see torii/db.py).
+# Never edit a migration that has already been applied anywhere — fix
+# forward with a new file. The one exception: a migration that failed on
+# its very first deploy is recorded nowhere, so it must be fixed in place.
+# The schema itself lands in 0001_init.sql (P1 step 2).

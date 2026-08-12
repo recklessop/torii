@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Set up two-factor — torii{% endblock %}
+{% block bare_content %}
+<div class="card narrow">
+  <h1>Set up two-factor</h1>
+  <p class="sub">
+    Every human account needs an authenticator. Add this secret to your app,
+    then confirm the code it shows.
+  </p>
+
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+  {% if qr_svg %}
+  <div class="qr">{{ qr_svg|safe }}</div>
+  <p class="muted">Scan it, or type the secret in by hand:</p>
+  {% endif %}
+
+  <div class="secret">{{ secret }}</div>
+  <details>
+    <summary class="muted">otpauth URI</summary>
+    <p class="muted"><code>{{ uri }}</code></p>
+  </details>
+
+  <form method="post" action="{{ action }}" autocomplete="off">
+    {% if request_id %}<input type="hidden" name="request_id" value="{{ request_id }}">{% endif %}
+    {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
+    <label for="totp_code">Code from your authenticator</label>
+    <input id="totp_code" name="totp_code" type="text" inputmode="numeric"
+           autocomplete="one-time-code" required autofocus placeholder="123456">
+    <button type="submit">Confirm and continue</button>
+  </form>
+</div>
+{% endblock %}

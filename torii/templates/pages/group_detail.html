@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}{{ group.name }} — torii{% endblock %}
+{% block heading %}{{ group.name }}{% endblock %}
+{% block crumb %}<a href="/ui/admin/groups">← all groups</a>{% endblock %}
+{% block content %}
+
+<div class="card">
+  <h2>Details</h2>
+  <form method="post" action="/ui/admin/groups/{{ group.id }}">
+    <div class="row">
+      <div><label for="g_name">Name</label>
+        <input id="g_name" name="name" type="text" required value="{{ group.name }}"></div>
+      <div><label for="g_desc">Description</label>
+        <input id="g_desc" name="description" type="text" value="{{ group.description or '' }}"></div>
+      <div><label for="g_claim">IdP claim</label>
+        <input id="g_claim" name="idp_claim" type="text" value="{{ group.idp_claim or '' }}"
+               placeholder="local only"></div>
+      <div class="narrow-field"><button type="submit">Save</button></div>
+    </div>
+    <p class="muted" style="font-size:12.5px;margin-top:10px">
+      Renaming is safe: the group's grants follow the name rather than breaking
+      on it. Empty claim means local membership is the only way in.
+    </p>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Members</h2>
+  <p class="sub">
+    Everyone here gets this group's grants, in addition to their own. Removing
+    someone takes effect on their very next call — no sign-out, no token
+    refresh.
+  </p>
+  {% if members %}
+  <div class="overflow"><table>
+    <thead><tr><th>Who</th><th>Kind</th><th>Added</th><th></th></tr></thead>
+    <tbody>
+      {% for m in members %}
+      <tr>
+        <td><a href="/ui/admin/principals/{{ m.id }}">{{ m.username }}</a>
+          {% if m.disabled_at %}<span class="pill off">disabled</span>{% endif %}</td>
+        <td>{{ m.kind }}</td>
+        <td class="muted">{{ m.added_at.strftime('%Y-%m-%d') }}</td>
+        <td>
+          <form class="inline" method="post"
+                action="/ui/admin/groups/{{ group.id }}/members/{{ m.id }}/delete"
+                onsubmit="return confirm('Remove {{ m.username }} from {{ group.name }}?')">
+            <button class="danger" type="submit">remove</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}
+  <p class="empty">Nobody is in this group, so its grants reach nobody.</p>
+  {% endif %}
+
+  {% if candidates %}
+  <form method="post" action="/ui/admin/groups/{{ group.id }}/members">
+    <div class="row">
+      <div><label for="member">Add someone</label>
+        <select id="member" name="principal_id" required>
+          <option value="">choose…</option>
+          {% for p in candidates %}
+          <option value="{{ p.id }}">{{ p.username }}{% if p.kind == 'service' %} (service){% endif %}</option>
+          {% endfor %}
+        </select></div>
+      <div class="narrow-field"><button type="submit">Add</button></div>
+    </div>
+  </form>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>What this group can reach</h2>
+  {% if grants %}
+  <div class="overflow"><table>
+    <thead><tr><th>Server</th><th>Tools</th></tr></thead>
+    <tbody>
+      {% for g in grants %}
+      <tr>
+        <td><code>{{ g.upstream_name }}</code></td>
+        <td class="tools">
+          {% if g.tool_scope == 'all' %}<span class="pill ok">all tools</span>
+          {% else %}{{ g.tools|join(', ') }}{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}
+  <p class="empty">No grants yet — this group hands out nothing.</p>
+  {% endif %}
+  <p class="sub">
+    Add or remove these on the <a href="/ui/admin/grants">Grants</a> page,
+    choosing this group under "who gets it".
+  </p>
+</div>
+{% endblock %}

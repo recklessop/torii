@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% block title %}Account — torii{% endblock %}
+{% block heading %}Password &amp; two-factor{% endblock %}
+{% block crumb %}{{ session.username }}{% endblock %}
+{% block content %}
+
+{% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+<div class="card">
+  <h2>Change password</h2>
+  <form method="post" action="/ui/account/password" autocomplete="off">
+    <label for="current">Current password</label>
+    <input id="current" name="current" type="password" autocomplete="current-password" required>
+    <label for="password">New password</label>
+    <input id="password" name="password" type="password" autocomplete="new-password" required>
+    <label for="confirm">Confirm new password</label>
+    <input id="confirm" name="confirm" type="password" autocomplete="new-password" required>
+    <button type="submit">Update password</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Two-factor</h2>
+  <p class="sub">
+    {% if totp_enrolled %}
+      An authenticator is enrolled on this account.
+      {% if totp_required %}It's required for you.{% else %}It isn't required, but it's still checked while enrolled.{% endif %}
+    {% elif totp_required %}
+      Required but not yet enrolled — you'll be asked to set it up on next sign-in.
+    {% else %}
+      Not required for your account. You can still add one.
+    {% endif %}
+  </p>
+  <p>
+    {% if totp_enrolled %}<span class="pill ok">enrolled</span>{% else %}<span class="pill">not enrolled</span>{% endif %}
+    {% if totp_required %}<span class="pill">required</span>{% endif %}
+  </p>
+  {% if not totp_enrolled %}
+  <form method="post" action="/ui/account/totp/start">
+    <button class="secondary" type="submit">Set up an authenticator</button>
+  </form>
+  {% else %}
+  <p class="muted">
+    Lost your phone? An admin can reset it for you — that's deliberate, so a
+    stolen session can't quietly swap the second factor.
+  </p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Passkeys</h2>
+  <p class="sub">
+    Sign in with Touch ID or a security key — one gesture instead of password
+    + code. Your password keeps working and stays the recovery path.
+  </p>
+
+  {% if notice %}<div class="notice">{{ notice }}</div>{% endif %}
+
+  {% for pk in passkeys %}
+  <div class="entity">
+    <div class="entity-head">
+      <div class="entity-title">
+        <div class="name">{{ pk.name }}</div>
+        <div class="sub2">
+          added {{ pk.created_at.strftime('%b %d, %Y') }}
+          {% if pk.last_used_at %} · last used {{ pk.last_used_at.strftime('%b %d %H:%M') }}
+          {% else %} · never used{% endif %}
+          {% if pk.backed_up %} · <span class="pill ok">synced</span>{% endif %}
+        </div>
+      </div>
+      <div class="entity-actions" style="margin:0">
+        <form method="post" action="/ui/account/webauthn/{{ pk.id }}/delete"
+              onsubmit="return confirm('Remove this passkey? You can add it again any time.')">
+          <button class="danger" type="submit">remove</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <p class="empty">No passkeys yet.</p>
+  {% endfor %}
+
+  <div id="passkey-add" hidden style="margin-top:var(--s3)">
+    <div class="row">
+      <div>
+        <label for="passkey-name">Name</label>
+        <input id="passkey-name" type="text" placeholder="e.g. MacBook Touch ID">
+      </div>
+      <div style="flex:0 0 auto;align-self:flex-end">
+        <button class="secondary" type="button" id="passkey-enroll">Add a passkey</button>
+      </div>
+    </div>
+    <div class="error" id="passkey-enroll-error" hidden></div>
+  </div>
+  <p class="muted" id="passkey-unsupported" style="font-size:13px">
+    Adding a passkey needs a supporting browser over HTTPS ({{ base_url }}).
+  </p>
+</div>
+{% endblock %}
+
+{% block page_script %}
+<script>
+(function () {
+  if (!window.isSecureContext || !window.PublicKeyCredential) return;
+  var add = document.getElementById('passkey-add');
+  var unsupported = document.getElementById('passkey-unsupported');
+  var button = document.getElementById('passkey-enroll');
+  var errbox = document.getElementById('passkey-enroll-error');
+  if (!add || !button) return;
+  add.hidden = false;
+  unsupported.hidden = true;
+
+  function b64uToBuf(s) {
+    s = s.replace(/-/g, '+').replace(/_/g, '/');
+    var pad = s.length % 4; if (pad) s += '===='.slice(pad);
+    var raw = atob(s), buf = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) buf[i] = raw.charCodeAt(i);
+    return buf.buffer;
+  }
+  function bufToB64u(buf) {
+    var bytes = new Uint8Array(buf), s = '';
+    for (var i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+    return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  function fail(message) { errbox.textContent = message; errbox.hidden = false; }
+
+  button.addEventListener('click', async function () {
+    errbox.hidden = true;
+    try {
+      var opt = await fetch('/ui/webauthn/register/options.json', {method: 'POST'});
+      var start = await opt.json();
+      if (!opt.ok) { fail(start.error || 'Could not start.'); return; }
+      var pk = start.options.publicKey || start.options;
+      pk.challenge = b64uToBuf(pk.challenge);
+      pk.user.id = b64uToBuf(pk.user.id);
+      (pk.excludeCredentials || []).forEach(function (c) { c.id = b64uToBuf(c.id); });
+      var cred = await navigator.credentials.create({publicKey: pk});
+      var body = {
+        name: document.getElementById('passkey-name').value,
+        credential: {
+          id: cred.id, rawId: bufToB64u(cred.rawId), type: cred.type,
+          clientExtensionResults: cred.getClientExtensionResults(),
+          response: {
+            clientDataJSON: bufToB64u(cred.response.clientDataJSON),
+            attestationObject: bufToB64u(cred.response.attestationObject),
+            transports: cred.response.getTransports ? cred.response.getTransports() : []
+          }
+        }
+      };
+      var verify = await fetch('/ui/webauthn/register/verify.json', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body)
+      });
+      var data = await verify.json();
+      if (!verify.ok) { fail(data.error || 'That didn\'t work.'); return; }
+      window.location.reload();
+    } catch (e) {
+      if (e && e.name === 'NotAllowedError') return;  // user closed the sheet
+      if (e && e.name === 'InvalidStateError') {
+        fail('This authenticator is already registered.');
+        return;
+      }
+      fail('Could not add a passkey.');
+    }
+  });
+})();
+</script>
+{% endblock %}

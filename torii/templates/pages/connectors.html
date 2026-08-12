@@ -1,0 +1,242 @@
+{% extends "base.html" %}
+{% block title %}Connectors — torii{% endblock %}
+{% block heading %}Connectors{% endblock %}
+{% block crumb %}Claude clients authorized against your account{% endblock %}
+{% block content %}
+
+{% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+{% if minted %}
+<div class="card">
+  <h2>Your new connector credential</h2>
+  <p class="sub">
+    Paste these into Claude's custom-connector dialog instead of letting it
+    register itself. The secret is shown once.
+  </p>
+  <div class="overflow"><table>
+    <tbody>
+      <tr><th style="width:150px">Client ID</th>
+          <td><span class="urlcopy"><code>{{ minted.client_id }}</code>
+              <button type="button" class="copybtn" data-copy="{{ minted.client_id }}">copy</button></span></td></tr>
+      <tr><th>Client secret</th>
+          <td><span class="urlcopy"><code>{{ minted.client_secret }}</code>
+              <button type="button" class="copybtn" data-copy="{{ minted.client_secret }}">copy</button></span></td></tr>
+      <tr><th>Access</th>
+          <td>{% if minted.access_mode == 'narrowed' %}<span class="pill">limited — it reaches nothing until you say what it may reach, under "edit what it reaches" below</span>
+              {% else %}<span class="pill ok">inherits your access</span>{% endif %}</td></tr>
+    </tbody>
+  </table></div>
+  <div class="secret">{{ minted.client_secret }}</div>
+  <p class="muted">
+    Because this id is fixed, its limits survive removing and re-adding the
+    connector in Claude — a self-registering connector gets a new id each
+    time and comes back with your full access.
+  </p>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>How to connect</h2>
+  <p class="sub">
+    Add one of these as a custom connector in Claude. It registers itself —
+    there's no client id to copy — then you sign in here and the tools you're
+    granted appear.
+  </p>
+
+  {% if my_servers %}
+  <h3>One server at a time — recommended</h3>
+  <p class="sub">
+    Tool names come through unprefixed, and Claude only carries that server's
+    tools in context instead of the whole estate's.
+  </p>
+  <div class="overflow"><table>
+    <thead><tr><th style="width:34%">Server</th><th>Connector URL</th></tr></thead>
+    <tbody>
+      {% for server in my_servers %}
+      <tr>
+        <td>{{ server.title }}{% if server.title != server.name %}<div class="muted" style="font-size:12px"><code>{{ server.name }}</code></div>{% endif %}</td>
+        <td>
+          <span class="urlcopy">
+            <code>{{ base_url }}/{{ server.name }}/mcp</code>
+            <button type="button" class="copybtn"
+                    data-copy="{{ base_url }}/{{ server.name }}/mcp"
+                    title="Copy this connector URL">copy</button>
+          </span>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+
+  <h3>Everything at once</h3>
+  <div class="overflow"><table>
+    <tbody>
+      <tr>
+        <td style="width:34%">All {{ my_servers|length }} server{{ '' if my_servers|length == 1 else 's' }} you're granted</td>
+        <td>
+          <span class="urlcopy">
+            <code>{{ base_url }}/mcp</code>
+            <button type="button" class="copybtn" data-copy="{{ base_url }}/mcp"
+                    title="Copy the aggregate URL">copy</button>
+          </span>
+          <div class="muted" style="font-size:12.5px">tools arrive prefixed <code>server__tool</code></div></td>
+      </tr>
+    </tbody>
+  </table></div>
+  {% else %}
+  <p class="empty">
+    You have no grants yet, so a connector would show an empty tool list.
+    Ask an admin for access first — then the URLs to use appear here.
+    (The aggregate endpoint is <code>{{ base_url }}/mcp</code>.)
+  </p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Create a credential yourself</h2>
+  <p class="sub">
+    Optional. Claude can register itself when you add the URL above — that's
+    simpler. Do this instead when you want a <strong>stable</strong> client id:
+    limits attached to a self-registering connector are lost when it's removed
+    and re-added, because it comes back as a different client.
+  </p>
+  <form method="post" action="/ui/connectors/provision">
+    <div class="row">
+      <div><label for="client_name">Name</label>
+        <input id="client_name" name="client_name" type="text" value="claude.ai"></div>
+      <div><label for="label">Which surface? (label)</label>
+        <input id="label" name="label" type="text" placeholder="phone, desktop, PPT add-in"></div>
+      <div><label for="narrowed">Access</label>
+        <select id="narrowed" name="narrowed">
+          <option value="">inherits my access</option>
+          <option value="1">limited to what I grant it</option>
+        </select></div>
+    </div>
+    <label for="redirect_uris">Redirect URI</label>
+    <input id="redirect_uris" name="redirect_uris" type="text"
+           placeholder="https://claude.ai/api/mcp/auth_callback (default)">
+    <button type="submit">Create client id + secret</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>New connectors</h2>
+  <p class="sub">
+    {% if narrow_new %}
+      New connectors start <strong>limited</strong>: they see nothing until you
+      grant them tools. Safer, but each new one needs a moment of setup.
+    {% else %}
+      New connectors <strong>inherit your access</strong> as soon as you sign
+      in with them. Convenient — but a connector you had limited and then
+      removed comes back with everything, because it re-registers as a new
+      client.
+    {% endif %}
+  </p>
+  <form method="post" action="/ui/account/narrow_new_clients">
+    <button class="secondary" type="submit">
+      {% if narrow_new %}Let new connectors inherit my access{% else %}Make new connectors start limited{% endif %}
+    </button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Authorized clients</h2>
+  <p class="sub">
+    Each one is a Claude surface that completed a sign-in — web, phone, an
+    Office add-in. Revoking kills its tokens immediately; it can register again
+    with your permission.
+  </p>
+
+  {% if clients %}
+    {% for c in clients %}
+    <div class="entity">
+      <div class="entity-head">
+        <div class="entity-title">
+          <div class="name">{{ c.label or c.client_name }}</div>
+          <div class="sub2">
+            <code>{{ c.client_id }}</code>
+            {% if c.registered_via == 'manual' %} · fixed id{% endif %}
+          </div>
+        </div>
+        <div class="entity-facts">
+          <span>{% if c.device %}set up from <b>{{ c.device }}</b>{% else %}origin unknown{% endif %}</span>
+          <span>added <b>{{ c.created_at.strftime('%b %d') }}</b></span>
+          <span>{% if c.last_seen_at %}seen <b>{{ c.last_seen_at.strftime('%b %d %H:%M') }}</b>{% else %}never used{% endif %}</span>
+          <span><b>{{ c.tokens }}</b> live token{{ '' if c.tokens == 1 else 's' }}</span>
+          <span>
+            {% if c.access_mode == 'narrowed' %}
+              {% if c.grant_count %}<span class="pill">limited · {{ c.grant_count }} server(s)</span>
+              {% else %}<span class="pill off">limited · reaches nothing yet</span>{% endif %}
+            {% else %}<span class="pill ok">inherits your access</span>{% endif %}
+          </span>
+        </div>
+      </div>
+
+      <div class="entity-actions">
+        <form method="post" action="/ui/connectors/{{ c.client_id }}/rename"
+              style="display:flex;gap:6px">
+          <input name="label" type="text" value="{{ c.label or '' }}"
+                 placeholder="name it: phone, desktop…" style="width:170px">
+          <button class="secondary" type="submit">rename</button>
+        </form>
+
+        <details class="scope-editor">
+          <summary class="scopelink">
+            {% if c.access_mode == 'narrowed' %}edit what it reaches{% else %}limit it{% endif %}
+          </summary>
+          <form method="post" action="/ui/connectors/{{ c.client_id }}/scope"
+                class="scopeform" data-client="{{ c.client_id }}">
+            {% if my_servers %}
+            <p class="muted" style="font-size:12.5px;margin:8px 0">
+              Tick what this connector may reach. It can never exceed your own
+              access, and anything you leave unticked it can't touch.
+            </p>
+            {% for server in my_servers %}
+            <div class="scoperow" data-server="{{ server.name }}">
+              <label style="display:inline-flex;align-items:center;gap:7px;color:var(--text);margin:0">
+                <input type="checkbox" name="scope_to" value="{{ server.name }}"
+                       style="width:auto" {{ 'checked' if server.name in c.scope }}>
+                <code>{{ server.name }}</code>
+              </label>
+              <button type="button" class="toolsbtn" data-load-tools="{{ server.name }}">
+                pick tools…
+              </button>
+              {% if c.scope.get(server.name) and c.scope[server.name] != 'all' %}
+              <span class="muted" style="font-size:12px">{{ c.scope[server.name]|join(', ') }}</span>
+              {% elif server.name in c.scope %}
+              <span class="muted" style="font-size:12px">all its tools</span>
+              {% endif %}
+              <div class="toolbox" hidden></div>
+            </div>
+            {% endfor %}
+            <button type="submit">Save what it reaches</button>
+            {% else %}
+            <p class="empty">You have no grants to delegate yet.</p>
+            {% endif %}
+          </form>
+        </details>
+
+        {% if c.access_mode == 'narrowed' %}
+        <form method="post" action="/ui/connectors/{{ c.client_id }}/access_mode">
+          <button class="secondary" type="submit" title="Let it inherit your access again">
+            unlimit
+          </button>
+        </form>
+        {% endif %}
+
+        <form method="post" action="/ui/clients/{{ c.client_id }}/revoke"
+              style="margin-left:auto"
+              onsubmit="return confirm('Revoke this connector and every token it holds?')">
+          <button class="danger" type="submit">revoke</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+  <p class="empty">
+    Nothing has registered yet. Once you add one of the URLs above in Claude
+    and sign in, it shows up here and you can revoke it from this page.
+  </p>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}My tools — torii{% endblock %}
+{% block heading %}My tools{% endblock %}
+{% block crumb %}what you can reach, and how{% endblock %}
+{% block content %}
+
+<div class="card">
+  <h2>Effective access</h2>
+  <p class="sub">
+    Read-only. This is what the gateway resolves for you right now — your own
+    grants, plus anything from a group you're in, narrowed by whichever client
+    you use. Ask an admin to change it.
+  </p>
+  {% if memberships %}
+  <p class="sub">
+    You're in {% for name in memberships %}<span class="pill">{{ name }}</span>{% if not loop.last %} {% endif %}{% endfor %}.
+  </p>
+  {% endif %}
+  {% if grants %}
+  <p class="sub">
+    Paste a URL into Claude as a custom connector to get just that server's
+    tools, unprefixed. <a href="/ui/connectors">Connectors</a> has the
+    aggregate URL if you'd rather have everything behind one entry.
+  </p>
+  <div class="overflow"><table>
+    <thead><tr><th>Server</th><th>Tools</th><th>Why</th><th>Connector URL for this server</th></tr></thead>
+    <tbody>
+      {% for upstream, tools in grants %}
+      <tr>
+        <td><code>{{ upstream }}</code></td>
+        <td class="tools">
+          {% if tools == 'all' %}<span class="pill ok">all tools</span>
+          {% else %}{{ tools|join(', ') }}{% endif %}
+        </td>
+        <td class="muted" style="font-size:12.5px">
+          {% for why in sources.get(upstream, []) %}<div>{{ why }}</div>{% endfor %}
+        </td>
+        <td>
+          <span class="urlcopy">
+            <code>{{ base_url }}/{{ upstream }}/mcp</code>
+            <button type="button" class="copybtn"
+                    data-copy="{{ base_url }}/{{ upstream }}/mcp"
+                    title="Copy this connector URL">copy</button>
+          </span>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}
+  <p class="empty">
+    You have no grants yet, so your tool list is empty — that's the default,
+    not a fault. Ask an admin to grant you a server.
+  </p>
+  {% endif %}
+</div>
+
+{% if narrowed %}
+<div class="card">
+  <h2>Per-connector limits</h2>
+  <p class="sub">These connectors are deliberately narrower than your baseline.</p>
+  <div class="overflow"><table>
+    <thead><tr><th>Connector</th><th>Server</th><th>Tools</th></tr></thead>
+    <tbody>
+      {% for row in narrowed %}
+      <tr>
+        <td>{{ row.label or row.client_name }}</td>
+        <td><code>{{ row.upstream_name }}</code></td>
+        <td class="tools">{% if row.tool_scope == 'all' %}all tools{% else %}{{ row.tools|join(', ') }}{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+</div>
+{% endif %}
+{% endblock %}

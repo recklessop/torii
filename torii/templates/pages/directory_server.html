@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}{{ server.name }} — MCP directory — torii{% endblock %}
+{% block extra_head %}
+<meta name="description" content="{{ server.summary[:180] }}">
+<script type="application/ld+json">{{ json_ld|safe }}</script>
+{% endblock %}
+{% block bare_content %}
+<div class="public">
+  <header class="public-head">
+    <div class="brand-lg"><a href="/directory" style="text-decoration:none"><span class="glyph">⛩</span> torii</a></div>
+    <p class="crumb-link"><a href="/directory">← MCP directory</a></p>
+    <h1>{{ server.title }}</h1>
+    <p class="muted"><code>{{ server.name }}</code></p>
+    <p class="lede">{{ server.summary or 'No description yet.' }}</p>
+    {% if server.url %}<p><a href="{{ server.url }}" rel="nofollow noopener">Project homepage →</a></p>{% endif %}
+    {% if not server.available %}<p><span class="pill off">currently offline</span></p>{% endif %}
+  </header>
+
+  <section class="card">
+    <h2>Tools</h2>
+    {% if tools %}
+    <p class="sub">
+      On this server's own endpoint the names are bare, as shown. On the
+      aggregate endpoint they carry a <code>{{ server.name }}__</code> prefix.
+      Either way you need a grant — listing isn't access.
+    </p>
+    <div class="overflow"><table>
+      <thead><tr><th style="width:38%">Tool</th><th>What it does</th></tr></thead>
+      <tbody>
+        {% for tool in tools %}
+        <tr>
+          <td><code>{{ tool.name }}</code></td>
+          <td>{{ tool.description or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table></div>
+    {% else %}
+    <p class="empty">
+      Tool list unavailable right now{% if not server.available %} — this server is offline{% endif %}.
+    </p>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>Connect</h2>
+    <div class="overflow"><table>
+      <tbody>
+        <tr><th style="width:190px">This server only</th>
+            <td><span class="urlcopy"><code>{{ base_url }}/{{ server.name }}/mcp</code>
+                <button type="button" class="copybtn"
+                        data-copy="{{ base_url }}/{{ server.name }}/mcp">copy</button></span>
+            <div class="muted" style="font-size:12.5px">Just these tools, unprefixed. Use this one.</div></td></tr>
+        <tr><th>Everything at once</th>
+            <td><code>{{ base_url }}/mcp</code>
+            <div class="muted" style="font-size:12.5px">All servers you're granted, tools prefixed <code>{{ server.name }}__</code></div></td></tr>
+        <tr><th>Transport</th><td>streamable HTTP</td></tr>
+        <tr><th>Auth</th><td>OAuth 2.1 + PKCE (self-registering), or a static bearer key</td></tr>
+      </tbody>
+    </table></div>
+    <p class="muted" style="margin-top:14px">
+      Add <code>{{ base_url }}/{{ server.name }}/mcp</code> as a custom
+      connector in Claude, sign in, and the tools you're granted appear
+      automatically. Use the aggregate endpoint instead if you want several
+      servers behind one connector.
+    </p>
+  </section>
+
+  <footer class="public-foot">
+    <a href="/directory">All servers</a> · <a href="/ui">Sign in</a>
+  </footer>
+</div>
+{% endblock %}

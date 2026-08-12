@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Overview — torii{% endblock %}
+{% block heading %}Overview{% endblock %}
+{% block crumb %}signed in as {{ session.username }}{% endblock %}
+{% block content %}
+
+<div class="stats">
+  <div class="stat"><div class="n">{{ counts.servers }}</div><div class="k">Servers I can reach</div></div>
+  <div class="stat"><div class="n">{{ counts.tools }}</div><div class="k">Tools granted</div></div>
+  <div class="stat"><div class="n">{{ counts.api_keys }}</div><div class="k">Active API keys</div></div>
+  <div class="stat"><div class="n">{{ counts.connectors }}</div><div class="k">Connectors</div></div>
+</div>
+
+<div class="card">
+  <h2>Connect a Claude client</h2>
+  <p class="sub">
+    Add torii once as a custom connector and every tool you're granted shows up
+    inside Claude. Ungranted servers aren't hidden behind a permission prompt —
+    they don't appear at all.
+  </p>
+  <table>
+    <tbody>
+      <tr><th style="width:170px">All my servers</th><td><code>{{ base_url }}/mcp</code>
+          <div class="muted" style="font-size:12.5px">tools prefixed <code>server__tool</code></div></td></tr>
+      <tr><th>One server only</th><td><code>{{ base_url }}/&lt;server&gt;/mcp</code>
+          <div class="muted" style="font-size:12.5px">just that server's tools, unprefixed — lighter on context</div></td></tr>
+      <tr><th>Auth</th><td>OAuth 2.1 (automatic for claude.ai) or a <a href="/ui/keys">static key</a></td></tr>
+      <tr><th>Metadata</th><td><code>{{ base_url }}/.well-known/oauth-authorization-server</code></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Public directory</h2>
+  <p class="sub">
+    {% if public_count %}
+      {{ public_count }} server{{ '' if public_count == 1 else 's' }} on this gateway
+      {{ 'is' if public_count == 1 else 'are' }} published publicly — browsable by
+      humans, search engines and agents, without a sign-in. Listing describes a
+      server; it grants nobody access.
+    {% else %}
+      No servers are published yet. An admin can list one from
+      <a href="/ui/admin/upstreams">Upstreams</a> to make it discoverable.
+    {% endif %}
+  </p>
+  <p><a class="button secondary" href="/directory">Browse the directory →</a></p>
+</div>
+
+<div class="card">
+  <h2>Recent activity</h2>
+  {% if recent %}
+  <div class="overflow"><table>
+    <thead><tr><th>When</th><th>Server · Tool</th><th>Via</th><th>Outcome</th></tr></thead>
+    <tbody>
+      {% for row in recent %}
+      <tr>
+        <td class="muted">{{ row.ts.strftime('%b %d %H:%M') }}</td>
+        <td class="tools"><code>{{ row.upstream_name or '—' }}</code>{% if row.tool_name %} · {{ row.tool_name }}{% endif %}</td>
+        <td class="muted">{{ row.via }}</td>
+        <td>
+          {% if row.outcome == 'ok' %}<span class="pill ok">ok</span>
+          {% elif row.outcome == 'denied' %}<span class="pill off">{{ row.error_code or 'denied' }}</span>
+          {% else %}<span class="pill">{{ row.error_code or row.outcome }}</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}
+  <p class="empty">Nothing yet. Calls appear here as soon as a client connects.</p>
+  {% endif %}
+</div>
+{% endblock %}
