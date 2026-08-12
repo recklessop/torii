@@ -1,8 +1,14 @@
-# torii
+<p align="center">
+  <img src="assets/torii.svg" alt="torii" width="120" height="120">
+</p>
 
-[![CI](https://github.com/recklessop/torii/actions/workflows/ci.yml/badge.svg)](https://github.com/recklessop/torii/actions/workflows/ci.yml)
-[![License: PolyForm NC 1.0.0](https://img.shields.io/badge/license-PolyForm%20NC%201.0.0-yellow.svg)](LICENSE)
-[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/)
+<h1 align="center">torii</h1>
+
+<p align="center">
+  <a href="https://github.com/recklessop/torii/actions/workflows/ci.yml"><img src="https://github.com/recklessop/torii/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-PolyForm%20NC%201.0.0-yellow.svg" alt="License: PolyForm NC 1.0.0"></a>
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.12-blue.svg" alt="Python 3.12"></a>
+</p>
 
 **A self-owned gateway in front of your MCP servers.** torii is an OAuth 2.1
 authorization server toward Claude clients (web, mobile, Office add-ins, Claude

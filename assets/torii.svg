@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="torii">
+  <g fill="#E8703A">
+    <!-- kasagi: top beam, ends swept up -->
+    <path d="M6,15 Q64,27 122,15 L122,28 Q64,40 6,28 Z"/>
+    <!-- gakuzuka: centre strut -->
+    <rect x="60" y="38" width="8" height="20"/>
+    <!-- nuki: tie beam -->
+    <rect x="18" y="56" width="92" height="12" rx="2"/>
+    <!-- left pillar (leans inward at the top) -->
+    <path d="M33,30 L45,30 L43,112 L27,112 Z"/>
+    <!-- right pillar -->
+    <path d="M83,30 L95,30 L101,112 L85,112 Z"/>
+  </g>
+</svg>
