@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/torii.svg" alt="torii" width="120" height="120">
+  <img src="assets/torii-300.png" alt="torii" width="120" height="120">
 </p>
 
 <h1 align="center">torii</h1>
